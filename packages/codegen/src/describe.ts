@@ -25,6 +25,7 @@
  * (overrides) lives in the pipeline's override step, applied last so it wins.
  */
 
+import pluralize from "pluralize";
 import type { CandidateTool, JsonSchema } from "./types.js";
 
 /**
@@ -165,6 +166,68 @@ function humanizeFieldName(name: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** Boolean names whose first word is a verb: hideBranding asks "whether to". */
+const BOOLEAN_VERB_PREFIXES = new Set(["allow", "show", "hide", "enable", "disable"]);
+
+/** Segments that follow the verb in a tool name but name nothing ("up" in "sign-up"). */
+const NON_NOUN_SEGMENTS = new Set(["up", "in", "out", "off", "all", "by", "current"]);
+
+/**
+ * Conventional names carry meaning a bare schema does not: every `*Id` is an
+ * identifier, every `*Url` is a URL, every `*At` is when something happened.
+ * A small set of conventions that always holds, rendered as sentences with no
+ * model involved. A name that matches nothing here falls back to its
+ * humanized form; a pattern that would need guessing is not a pattern.
+ *
+ * `noun` is the subject to use when the name itself carries none ("id" inside
+ * create-trip): the enclosing field's name, or the tool's noun at the top.
+ */
+function patternSentence(name: string, schema: JsonSchema, noun?: string): string | undefined {
+  const words = humanizeFieldName(name).toLowerCase().split(" ").filter(Boolean);
+  const last = words[words.length - 1];
+  const stem = words.slice(0, -1).join(" ");
+  const subject = stem || noun;
+
+  if (last === "id" && subject) return `The unique identifier of the ${subject}.`;
+  if (last === "url" && subject) return `The URL of the ${subject}.`;
+  if (last === "at" && words.length > 1) {
+    // The stem's last word is the event ("captured"); anything before it is
+    // what it happened to ("email verified at" → the email).
+    const happenedTo = words.slice(0, -2).join(" ") || noun;
+    if (happenedTo) return `When the ${happenedTo} was ${words[words.length - 2]}.`;
+  }
+  if (last === "count" && stem) return `The number of ${pluralize.plural(stem)}.`;
+  const first = words[0];
+  if (schema.type === "boolean" && words.length > 1 && first && BOOLEAN_VERB_PREFIXES.has(first)) {
+    return `Whether to ${words.join(" ")}.`;
+  }
+  return undefined;
+}
+
+/**
+ * The noun a tool acts on, from its name: "create-trip" → "trip". Our own
+ * naming rules put the verb first, so the next segment that means something
+ * is the noun. Only a fallback subject for pattern sentences.
+ */
+function toolNounFromName(name: string): string | undefined {
+  for (const segment of name.split("-").slice(1)) {
+    if (!segment || NON_NOUN_SEGMENTS.has(segment) || /^v\d+$/.test(segment)) continue;
+    return pluralize.singular(segment);
+  }
+  return undefined;
+}
+
+/** The subject a field's children fall back to: the field's own name,
+ *  singularized for arrays ("photos[]" fields each describe one photo). */
+function fieldNoun(name: string, schema: JsonSchema): string {
+  const words = humanizeFieldName(name).toLowerCase().split(" ").filter(Boolean);
+  const lastIndex = words.length - 1;
+  if (schema.type === "array" && lastIndex >= 0) {
+    words[lastIndex] = pluralize.singular(words[lastIndex] as string);
+  }
+  return words.join(" ");
+}
+
 /**
  * A spec author writing "X." or "The id." has not described the field; they
  * have closed their editor. Stub text is treated as absent: the field gets a
@@ -187,6 +250,7 @@ function isStubDescription(text: string): boolean {
 export function describeField(
   name: string,
   schema: JsonSchema,
+  context?: { noun?: string },
 ): { description: string; synthesized: boolean } {
   const raw = typeof schema.description === "string" ? schema.description.trim() : "";
   const authorText = raw && !isStubDescription(raw) ? raw : "";
@@ -200,19 +264,39 @@ export function describeField(
     };
   }
 
-  // The humanized name is sometimes itself a description ("Trip id" for
-  // tripId); a stub then *is* the draft, and the constraint text is what adds
-  // anything new. Only when the name adds nothing (the stub was just the
-  // letter, like "x") does the format get promoted into the draft.
+  // A conventional name ("tripId", "coverImageUrl") reads as a real sentence;
+  // that beats the bare humanized name because it says what the name only
+  // hints at. Anything else gets the name plus whatever the schema proves.
   const nameText = humanizeFieldName(name);
-  const stubIsTheName = raw && raw.replace(/[.\s]+/g, "").toLowerCase() === name.toLowerCase();
+  const pattern = patternSentence(name, schema, context?.noun);
+  if (pattern) {
+    const suffix = constraints || FORMAT_SENTENCES[schema.format ?? ""] || "";
+    return { description: suffix ? `${pattern} ${suffix}` : pattern, synthesized: true };
+  }
   const format = FORMAT_SENTENCES[schema.format ?? ""];
-  const draft = stubIsTheName
-    ? `${nameText}.${constraints ? ` ${constraints}` : ""}`
-    : format && !constraints
+  // "Email. An email address." says one thing twice: when the format sentence
+  // already carries the noun, it is the draft on its own.
+  if (format && constraints === format && format.toLowerCase().includes(nameText.toLowerCase())) {
+    return { description: format, synthesized: true };
+  }
+  const draft =
+    format && !constraints
       ? `${nameText} (${format.replace(/^An?\s+/i, "").replace(/\.$/, "")}).`
       : `${nameText}.${constraints ? ` ${constraints}` : ""}`;
   return { description: draft, synthesized: true };
+}
+
+/**
+ * Nullable is usually spelled anyOf: [T, { type: "null" }] (TypeBox's
+ * Type.Union, zod's .nullable()). The wrapper carries no meaning of its own:
+ * the real schema is the non-null member, and that is where the constraints,
+ * the format, and any nested properties live. Describe through it, or every
+ * nullable object ships its inner fields bare.
+ */
+function unwrapNullable(schema: JsonSchema): JsonSchema {
+  if (!Array.isArray(schema.anyOf) || schema.anyOf.length !== 2) return schema;
+  const nonNull = schema.anyOf.filter((member) => member?.type !== "null");
+  return nonNull.length === 1 && nonNull[0] ? nonNull[0] : schema;
 }
 
 /**
@@ -231,19 +315,32 @@ export function describeCandidateInputs(candidate: CandidateTool): void {
     prefix: string,
     properties: Record<string, JsonSchema> | undefined,
     depth: number,
+    noun: string | undefined,
   ): void => {
     if (!properties || depth > 2) return;
     for (const [name, fieldSchema] of Object.entries(properties)) {
       const path = prefix ? `${prefix}.${name}` : name;
-      const { description, synthesized: wasSynthesized } = describeField(name, fieldSchema);
+      const inner = unwrapNullable(fieldSchema);
+      // Author text sits on either side of a nullable wrapper; both are the
+      // author's. The assembled text is written on the wrapper, so the shape
+      // the agent reads is unchanged apart from the words.
+      const { description, synthesized: wasSynthesized } = describeField(
+        name,
+        {
+          ...inner,
+          description: fieldSchema.description ?? inner.description,
+        },
+        { noun },
+      );
       if (description) fieldSchema.description = description;
       if (wasSynthesized) synthesized.push(path);
-      walk(path, fieldSchema.properties, depth + 1);
-      if (fieldSchema.items) walk(`${path}[]`, fieldSchema.items.properties, depth + 1);
+      const childNoun = fieldNoun(name, inner);
+      walk(path, inner.properties, depth + 1, childNoun);
+      if (inner.items) walk(`${path}[]`, inner.items.properties, depth + 1, childNoun);
     }
   };
 
-  walk("", candidate.inputSchema.properties, 0);
+  walk("", candidate.inputSchema.properties, 0, toolNounFromName(candidate.name));
   candidate.synthesizedFields = synthesized;
 }
 

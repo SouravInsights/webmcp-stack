@@ -207,6 +207,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
 
   /* Search */
   .search-wrap {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -237,7 +238,6 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
     color: var(--faint);
     pointer-events: none;
   }
-  .search-wrap { position: relative; }
 
   /* Tool list */
   .tool-list {
@@ -519,6 +519,52 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
     line-height: 1.5;
   }
 
+  /* Field descriptions: text-first rows, one inline editor at a time. Not a
+     form: a wall of pre-filled inputs reads as a second copy of the test
+     form, which is exactly the duplication this replaced. */
+  .field-list {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .field-row {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-subtle);
+  }
+  .field-row:last-child { border-bottom: 0; }
+  .field-row-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .field-name {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--dim);
+  }
+  .field-text {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .field-empty { color: var(--faint); }
+  .field-edit-btn {
+    margin-left: auto;
+    background: none;
+    border: 0;
+    color: var(--faint);
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .field-edit-btn:hover { color: var(--ink); background: var(--surface-raised); }
+  .field-row .param-input { margin-top: 6px; }
+  .field-row .edit-actions { margin-top: 8px; }
+  .badge.override { color: var(--accent); background: var(--accent-dim); }
+
   /* Toggle */
   .toggle-row {
     display: flex;
@@ -671,6 +717,15 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
   }
   .result.ok { border-color: var(--accent); }
   .result.err { border-color: var(--fault); }
+  .empty-note {
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--faint);
+    font-size: 13px;
+    line-height: 1.5;
+  }
 
   /* Findings */
   .findings {
@@ -784,6 +839,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
   var state = null;
   var selected = null;
   var filter = "";
+  var editingField = null;
 
   var listEl = document.getElementById("tool-list");
   var detailEl = document.getElementById("detail");
@@ -868,6 +924,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     Array.prototype.forEach.call(listEl.querySelectorAll(".tool"), function (btn) {
       btn.addEventListener("click", function () {
         selected = btn.getAttribute("data-name");
+        editingField = null;
         renderList();
         renderDetail();
         // On narrow screens the detail slides over the list.
@@ -893,13 +950,11 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     detailEl.hidden = false;
 
     // The verb chip carries read/write/destructive (color-coded). Badges
-    // only surface what changes what you do: disabled state, role, PII.
+    // only surface what the rest of the pane does not: withholding is a
+    // safety decision worth a badge, while plain disabled state is what the
+    // Status toggle below already says.
     var badges = [
-      !tool.enabled
-        ? tool.withheld
-          ? '<span class="badge disabled">withheld from agents</span>'
-          : '<span class="badge disabled">starts disabled</span>'
-        : "",
+      !tool.enabled && tool.withheld ? '<span class="badge disabled">withheld from agents</span>' : "",
       tool.endpointRole && tool.endpointRole !== "endpoint" ? '<span class="badge auth">' + tool.endpointRole + "</span>" : "",
       tool.piiInOutput && tool.piiInOutput.length > 0 ? '<span class="badge write">pii: ' + esc(tool.piiInOutput.join(", ")) + "</span>" : "",
     ].filter(Boolean).join("");
@@ -918,25 +973,41 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       var req = required.indexOf(key) !== -1 ? ' <span class="req">*</span>' : "";
       var hint = field.description ? '<div class="param-hint">' + esc(field.description) + "</div>" : "";
       return '<div class="param"><label class="param-label">' + esc(key) + req + '</label>' +
-        '<input class="param-input" data-field="' + esc(key) + '" data-type="' + esc(field.type || "string") + '" type="' + type + '" spellcheck="false" />' +
+        '<input class="param-input" data-param="' + esc(key) + '" data-type="' + esc(field.type || "string") + '" type="' + type + '" spellcheck="false" />' +
         hint + "</div>";
     }).join("");
 
-    // Field description editor: the assembled text the agent reads, editable
-    // per field. Overrides are the developer's final word and survive
-    // regeneration, exactly like the tool description.
+    // Field descriptions: text-first rows, one Edit per row. A wall of
+    // pre-filled inputs read as a second copy of the test form, and the two
+    // forms sharing markup is how description text once leaked into run
+    // payloads.
     var fieldOverrides = tool.fieldOverrides || {};
-    var fieldEdits = Object.keys(properties).map(function (key) {
+    var fieldRows = Object.keys(properties).map(function (key) {
       var field = properties[key];
-      var value = fieldOverrides[key] !== undefined ? fieldOverrides[key] : (field.description || "");
-      var overridden = fieldOverrides[key] !== undefined ? ' <span class="badge">override</span>' : "";
-      return '<div class="param"><label class="param-label">' + esc(key) + overridden + '</label>' +
-        '<input class="param-input field-desc" data-field="' + esc(key) + '" type="text" value="' + esc(value) + '" spellcheck="false" />' +
+      var isOverridden = fieldOverrides[key] !== undefined;
+      var text = isOverridden ? fieldOverrides[key] : (field.description || "");
+      if (editingField === key) {
+        return '<div class="field-row">' +
+          '<div class="field-row-head"><span class="field-name">' + esc(key) + "</span></div>" +
+          '<input class="param-input" id="field-edit-input" type="text" value="' + esc(text) + '" spellcheck="false" />' +
+          '<div class="edit-actions">' +
+          '<button class="btn btn-primary" id="save-field">Save</button>' +
+          '<button class="btn" id="cancel-field">Cancel</button>' +
+          "</div></div>";
+      }
+      return '<div class="field-row">' +
+        '<div class="field-row-head"><span class="field-name">' + esc(key) + "</span>" +
+        (isOverridden ? '<span class="badge override">override</span>' : "") +
+        '<button class="field-edit-btn" data-edit-field="' + esc(key) + '">Edit</button></div>' +
+        '<div class="field-text">' + (text ? esc(text) : '<span class="field-empty">No description yet.</span>') + "</div>" +
         "</div>";
     }).join("");
 
     var baseUrl = "";
     try { baseUrl = localStorage.getItem("webmcp-codegen:baseUrl") || tool.serverUrl || ""; } catch (e) {}
+    // Only route-backed tools have anything to call. Schema-only and
+    // form-output tools get a note instead of a form that can only fail.
+    var canRun = !!(tool.verb && tool.path);
 
     detailEl.innerHTML =
       '<div class="detail-header">' +
@@ -982,14 +1053,10 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       '<div class="edit-hint">Agents pick tools by this text. Saved to .webmcp-codegen.json, so it survives regeneration. ⌘S to save.</div>' +
       "</div>" +
 
-      (fieldEdits
+      (fieldRows
         ? '<div class="section">' +
           '<div class="section-label">Field descriptions</div>' +
-          fieldEdits +
-          '<div class="edit-actions">' +
-          '<button class="btn btn-primary" id="save-fields">Save fields</button>' +
-          '<span class="saved-indicator" id="saved-fields">Saved</span>' +
-          "</div>" +
+          '<div class="field-list">' + fieldRows + "</div>" +
           '<div class="edit-hint">Agents fill inputs from this text. Saved per field to .webmcp-codegen.json, so it survives regeneration.</div>' +
           "</div>"
         : "") +
@@ -1005,24 +1072,50 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       "</div></div>" +
       "</div>" +
 
-      '<div class="section">' +
-      '<div class="section-label">Test</div>' +
-      '<div class="try-section">' +
-      '<div class="try-header"><h3>Run this tool</h3><span class="try-note">server-side, no browser session</span></div>' +
-      '<div class="try-body">' +
-      (tool.requiresAuth
-        ? '<div class="auth-note">⚠ This endpoint requires a browser session. The dashboard runs server-side, so you will get a 401. Test it in Chrome DevTools where you are signed in.</div>'
-        : "") +
-      '<input class="base-url-input" id="base-url" type="text" placeholder="Base URL (e.g. http://localhost:3000)" value="' + esc(baseUrl) + '" spellcheck="false" />' +
-      (fields || '<div style="color: var(--faint); font-size: 13px; margin-bottom: 14px;">This tool takes no inputs.</div>') +
-      '<button class="run-btn" id="run">Run tool</button>' +
-      '<pre class="result" id="result" hidden></pre>' +
-      "</div></div>" +
-      "</div>";
+      (canRun
+        ? '<div class="section">' +
+          '<div class="section-label">Test</div>' +
+          '<div class="try-section">' +
+          '<div class="try-header"><h3>Run this tool</h3><span class="try-note">server-side, no browser session</span></div>' +
+          '<div class="try-body">' +
+          (tool.requiresAuth
+            ? '<div class="auth-note">⚠ This endpoint requires a browser session. The dashboard runs server-side, so you will get a 401. Test it in Chrome DevTools where you are signed in.</div>'
+            : "") +
+          '<input class="base-url-input" id="base-url" type="text" placeholder="Base URL (e.g. http://localhost:3000)" value="' + esc(baseUrl) + '" spellcheck="false" />' +
+          (fields || '<div style="color: var(--faint); font-size: 13px; margin-bottom: 14px;">This tool takes no inputs.</div>') +
+          '<button class="run-btn" id="run">Run tool</button>' +
+          '<pre class="result" id="result" hidden></pre>' +
+          "</div></div>" +
+          "</div>"
+        : '<div class="section">' +
+          '<div class="section-label">Test</div>' +
+          '<div class="empty-note">' +
+          (tool.form
+            ? "This tool annotates a form on the page; there is no endpoint to call."
+            : "This tool has no endpoint, so there is nothing to run from the dashboard.") +
+          "</div></div>");
 
     document.getElementById("save-desc").addEventListener("click", saveDescription);
-    var saveFieldsBtn = document.getElementById("save-fields");
-    if (saveFieldsBtn) saveFieldsBtn.addEventListener("click", saveFields);
+    Array.prototype.forEach.call(detailEl.querySelectorAll("[data-edit-field]"), function (btn) {
+      btn.addEventListener("click", function () {
+        editingField = btn.getAttribute("data-edit-field");
+        renderDetail();
+        var input = document.getElementById("field-edit-input");
+        if (input) {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      });
+    });
+    var saveFieldBtn = document.getElementById("save-field");
+    if (saveFieldBtn) saveFieldBtn.addEventListener("click", saveFieldEdit);
+    var cancelFieldBtn = document.getElementById("cancel-field");
+    if (cancelFieldBtn) {
+      cancelFieldBtn.addEventListener("click", function () {
+        editingField = null;
+        renderDetail();
+      });
+    }
     var backBtn = document.getElementById("detail-back");
     if (backBtn) {
       backBtn.addEventListener("click", function () {
@@ -1030,10 +1123,14 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       });
     }
     document.getElementById("toggle-enabled").addEventListener("click", toggleEnabled);
-    document.getElementById("run").addEventListener("click", runTool);
-    document.getElementById("base-url").addEventListener("change", function (event) {
-      try { localStorage.setItem("webmcp-codegen:baseUrl", event.target.value); } catch (e) {}
-    });
+    var runBtn = document.getElementById("run");
+    if (runBtn) runBtn.addEventListener("click", runTool);
+    var baseUrlInput = document.getElementById("base-url");
+    if (baseUrlInput) {
+      baseUrlInput.addEventListener("change", function (event) {
+        try { localStorage.setItem("webmcp-codegen:baseUrl", event.target.value); } catch (e) {}
+      });
+    }
   }
 
   function saveDescription() {
@@ -1052,24 +1149,22 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     }).catch(function (error) { alert(error.message); });
   }
 
-  function saveFields() {
+  function saveFieldEdit() {
     var tool = currentTool();
-    if (!tool) return;
+    var input = document.getElementById("field-edit-input");
+    if (!tool || !input || !editingField) return;
+    var value = input.value.trim();
+    if (!value) return;
     var fields = {};
-    Array.prototype.forEach.call(document.querySelectorAll(".field-desc"), function (input) {
-      var value = input.value.trim();
-      if (value) fields[input.getAttribute("data-field")] = value;
-    });
-    if (Object.keys(fields).length === 0) return;
+    fields[editingField] = value;
     api("/api/override", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: tool.name, fields: fields }),
     }).then(function () {
       tool.fieldOverrides = Object.assign({}, tool.fieldOverrides, fields);
-      var saved = document.getElementById("saved-fields");
-      saved.classList.add("show");
-      setTimeout(function () { saved.classList.remove("show"); }, 2000);
+      editingField = null;
+      renderDetail();
     }).catch(function (error) { alert(error.message); });
   }
 
@@ -1092,7 +1187,9 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     var tool = currentTool();
     if (!tool) return;
     var input = {};
-    Array.prototype.forEach.call(document.querySelectorAll("[data-field]"), function (field) {
+    // Only the test form's inputs carry data-param, and the description
+    // editor is read by id: field text can never become a request value.
+    Array.prototype.forEach.call(document.querySelectorAll("[data-param]"), function (field) {
       var value = field.value;
       if (value === "") return;
       var type = field.getAttribute("data-type");
@@ -1101,7 +1198,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       if (type === "object" || type === "array") {
         try { value = JSON.parse(value); } catch (e) { /* keep as string */ }
       }
-      input[field.getAttribute("data-field")] = value;
+      input[field.getAttribute("data-param")] = value;
     });
     var baseUrl = document.getElementById("base-url").value.trim();
     var resultEl = document.getElementById("result");
@@ -1138,7 +1235,10 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     }
     if ((event.metaKey || event.ctrlKey) && event.key === "s") {
       event.preventDefault();
-      saveDescription();
+      // ⌘S saves whatever is being edited: an open field row, else the
+      // tool description.
+      if (document.getElementById("field-edit-input")) saveFieldEdit();
+      else saveDescription();
       return;
     }
     if (event.target === searchEl || event.target.tagName === "TEXTAREA" || event.target.tagName === "INPUT") {
@@ -1151,6 +1251,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     if (next < 0 || next >= tools.length) return;
     event.preventDefault();
     selected = tools[next].name;
+    editingField = null;
     renderList();
     renderDetail();
     var button = listEl.querySelector('[aria-selected="true"]');

@@ -188,14 +188,17 @@ function toUiTool(
 ): DashboardState["tools"][number] {
   // Route info only exists for endpoint-backed tools. A standalone schema
   // tool has no verb, and showing one would be a lie; the provenance line
-  // carries the truth instead ("schema: create-trip", "merged: … + POST …").
+  // carries the truth instead ("schema: create-trip").
   const route = tool.endpointRef ?? (tool.source.kind === "openapi" ? tool.source.ref : "");
   const [verb, ...rest] = route ? route.split(" ") : [undefined, ""];
+  // Provenance names where the tool came from, exactly once. The route line
+  // owns the verb and path, so a merged tool names only its schema, and a
+  // pure OpenAPI tool has nothing left to say: no line at all.
   const provenance = tool.endpointRef
-    ? `merged: ${tool.source.ref} + ${tool.endpointRef}`
+    ? `merged: the ${tool.source.ref} schema and this route`
     : tool.source.kind === "schema"
       ? `schema: ${tool.source.ref}`
-      : tool.source.ref;
+      : "";
   // The dry run already holds every file's contents in memory, so the
   // dashboard can show the real generated source per tool — the same
   // progressive disclosure the site's demo has, against live output.

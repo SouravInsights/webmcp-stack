@@ -152,8 +152,65 @@ describe("stub descriptions and format-aware drafts", () => {
 
   it("drafts carry the format when the name already says the noun", () => {
     const result = describeField("tripId", { type: "string", format: "uuid" });
-    expect(result.description).toBe("Trip id. A UUID.");
+    expect(result.description).toBe("The unique identifier of the trip. A UUID.");
     expect(result.synthesized).toBe(true);
+  });
+});
+
+describe("pattern sentences", () => {
+  it("reads conventional names as the sentences they carry", () => {
+    expect(describeField("tripId", { type: "string" }).description).toBe(
+      "The unique identifier of the trip.",
+    );
+    expect(describeField("coverImageUrl", { type: "string" }).description).toBe(
+      "The URL of the cover image.",
+    );
+    expect(describeField("photoCount", { type: "integer" }).description).toBe(
+      "The number of photos.",
+    );
+    expect(describeField("hideBranding", { type: "boolean" }).description).toBe(
+      "Whether to hide branding.",
+    );
+  });
+
+  it("uses the enclosing noun when the name has no stem", () => {
+    expect(describeField("id", { type: "string" }, { noun: "trip" }).description).toBe(
+      "The unique identifier of the trip.",
+    );
+    expect(describeField("createdAt", { type: "string" }, { noun: "trip" }).description).toBe(
+      "When the trip was created.",
+    );
+    expect(describeField("emailVerifiedAt", { type: "string" }, { noun: "user" }).description).toBe(
+      "When the email was verified.",
+    );
+  });
+
+  it("falls back to the humanized name when no pattern holds", () => {
+    expect(describeField("id", { type: "string" }).description).toBe("Id.");
+    expect(describeField("title", { type: "string" }).description).toBe("Title.");
+    // The whether-to reading is only safe on booleans.
+    expect(describeField("hideBranding", { type: "string" }).description).toBe("Hide branding.");
+  });
+
+  it("lets the format sentence stand alone when it already says the noun", () => {
+    const result = describeField("email", { type: "string", format: "email" });
+    expect(result.description).toBe("An email address.");
+    expect(result.synthesized).toBe(true);
+    // A name the format does not cover still leads the draft.
+    expect(describeField("contactEmail", { type: "string", format: "email" }).description).toBe(
+      "Contact email. An email address.",
+    );
+  });
+
+  it("threads the tool's noun into top-level fields", () => {
+    const candidate = {
+      name: "create-trip",
+      inputSchema: { type: "object", properties: { id: { type: "string" } } },
+    } as unknown as CandidateTool;
+    describeCandidateInputs(candidate);
+    expect(candidate.inputSchema.properties?.id?.description).toBe(
+      "The unique identifier of the trip.",
+    );
   });
 });
 
@@ -273,12 +330,78 @@ describe("describeCandidateInputs nested walk", () => {
     const photos = candidate.inputSchema.properties?.photos;
     const items = photos?.items;
     expect(items?.properties?.capturedAt?.description).toBe(
-      "Captured at. A date-time in ISO 8601 format.",
+      "When the photo was captured. A date-time in ISO 8601 format.",
     );
     expect(items?.properties?.location?.properties?.lat?.description).toBe(
       "Lat. A number from -90 to 90.",
     );
     expect(candidate.synthesizedFields).toContain("photos[].capturedAt");
     expect(candidate.synthesizedFields).toContain("photos[].location.lat");
+  });
+});
+
+describe("describeCandidateInputs through nullable wrappers", () => {
+  it("describes the fields of a nullable object instead of shipping them bare", () => {
+    const candidate = {
+      name: "create-trip",
+      inputSchema: {
+        type: "object",
+        properties: {
+          location: {
+            anyOf: [
+              {
+                type: "object",
+                properties: { name: { type: "string" } },
+                required: ["name"],
+              },
+              { type: "null" },
+            ],
+          },
+        },
+      },
+    } as unknown as CandidateTool;
+    describeCandidateInputs(candidate);
+    const location = candidate.inputSchema.properties?.location;
+    expect(location?.description).toBe("Location.");
+    expect(location?.anyOf?.[0]?.properties?.name?.description).toBe("Name.");
+    expect(candidate.synthesizedFields).toEqual(["location", "location.name"]);
+  });
+
+  it("reads constraints and formats through the wrapper", () => {
+    const candidate = {
+      name: "create-trip",
+      inputSchema: {
+        type: "object",
+        properties: {
+          startDate: { anyOf: [{ type: "string", format: "date" }, { type: "null" }] },
+        },
+      },
+    } as unknown as CandidateTool;
+    describeCandidateInputs(candidate);
+    expect(candidate.inputSchema.properties?.startDate?.description).toBe(
+      "Start date. A date (YYYY-MM-DD).",
+    );
+  });
+
+  it("keeps author text written inside the wrapper", () => {
+    const candidate = {
+      name: "create-trip",
+      inputSchema: {
+        type: "object",
+        properties: {
+          bio: {
+            anyOf: [
+              { type: "string", description: "A short biography shown on the profile." },
+              { type: "null" },
+            ],
+          },
+        },
+      },
+    } as unknown as CandidateTool;
+    describeCandidateInputs(candidate);
+    expect(candidate.inputSchema.properties?.bio?.description).toBe(
+      "A short biography shown on the profile.",
+    );
+    expect(candidate.synthesizedFields).toEqual([]);
   });
 });
