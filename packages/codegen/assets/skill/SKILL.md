@@ -1,0 +1,117 @@
+---
+name: webmcp-tools
+description: Build, improve, or review this repo's WebMCP tools and journeys — the *.webmcp.ts files that expose site capabilities to AI agents. Use when creating a new tool, editing a tool's name/description/schema, enabling a withheld tool, or defining a multi-step journey.
+---
+
+# WebMCP tools in this repo
+
+WebMCP tools run in the visitor's browser, with the signed-in user's session,
+while the agent calling them may also be reading attacker-influenced page
+content. Every tool you write is both an API and a security surface. The rules
+below exist so an agent-facing tool is correct by default — follow them even
+when the user's request is casual.
+
+## Naming
+
+- Verb-first, intent-shaped, max 30 characters: `list-trips`,
+  `add-bucket-list-destination`. Never method-first (`get-v1-trips`), never
+  numbered (`get-pricing-2`).
+- Name the user's intent, not the endpoint. `POST /search` is a read named
+  `search-...`; `POST /orders/{id}/cancel` is destructive named `cancel-...`.
+- **Understand the product before naming anything.** What is it, who uses it,
+  and when in the user's life does this action happen? If that is not written
+  down in the repo, ask the user before naming intent-level tools or journeys.
+  Wrong-tense or wrong-role names pass every mechanical check and are still
+  wrong: on a journal for trips you've *been on*, the flow is `document-trip`,
+  never `plan-trip`. This is the failure no linter can catch — it is your job.
+
+## Descriptions
+
+- Say what the tool does, when to use it, and what it returns:
+  "Create a new trip. Returns the trip."
+- Max 500 characters for the tool, max 150 per parameter. Turn constraints
+  into sentences: "A number from 30 to 600."
+- Never instruct the agent or encode flow control in a description
+  ("always call X first") — that is steering. Prerequisites belong in a
+  journey, not in prose.
+- If a field's value can only come from another tool (a resolved place object,
+  a server id), say so in that field's description.
+
+## Safety and exposure
+
+- Reads are registered immediately. Writes and destructive tools stay
+  withheld — generated but not registered — until the user deliberately
+  enables one. Never enable a write tool without being asked.
+- Mutating tools confirm each call with the human via
+  `requestUserConfirmation`. That call lives in the generated region; never
+  move or remove it.
+- Free-text outputs get `untrustedContentHint: true` — the agent must not
+  treat user-written content as the site speaking.
+- **The schema is not the security boundary.** `execute` must call the app's
+  real endpoint or action layer, so server-side validation runs on every
+  call. Never wire `execute` to return canned data or bypass the app's own
+  flow (cache invalidation, navigation, stores).
+
+## The execute contract
+
+- Never throw for failure. The browser maps a rejected `execute` to a bare
+  `UnknownError` and discards your message. Return `toolError(message)` /
+  `asToolError(error)` so the agent can read and recover. (Cancellation is
+  the one exception: let `AbortError` propagate.)
+- Return via `toolResult(data)` and keep outputs under ~1.5K characters —
+  summarize or paginate rather than dumping.
+- When a call changes what is on screen, make it visible: navigate,
+  invalidate a query, dispatch an event. The human is watching the page.
+
+## Editing generated files
+
+- Each `*.webmcp.ts` has a generated region between the
+  `webmcp-codegen` markers — never edit inside it; regeneration rewrites it.
+  Your work goes below the marker (the `execute` body) or in
+  `.webmcp-codegen.json` (description/name/enabled overrides, which survive
+  regeneration and always win over generated text).
+- After editing tools, run `npx @webmcp-stack/codegen verify` and fix what it
+  reports.
+
+## Journeys (multi-step flows)
+
+Reach for a journey when a goal takes several calls with shared state, when
+an input can't be invented (a resolved place object), or when a spend should
+be gated (an eligibility check before a paid generation). Pattern:
+
+```ts
+import { createJourney } from "../webmcp/journey.webmcp";
+
+export const documentTrip = createJourney({
+  name: "document-trip",
+  goal: "Record a trip you've been on and open the editor to write its story",
+  steps: {
+    "search-places": {
+      description: "Search real places and store the pick.",
+      input: { type: "object", properties: { input: { type: "string" } }, required: ["input"] },
+      provides: ["locationObject"],
+      run: async (input, signal) => {
+        const res = await executeGetAutocomplete({ input: String(input.input) }, signal);
+        // Store the resolved place the user picked from the results:
+        return { locationObject: res };
+      },
+    },
+    "set-details": {
+      description: "Set the trip's title and dates.",
+      input: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
+      provides: ["title"],
+    },
+  },
+  submit: {
+    description: "Create the trip and open it in the editor.",
+    build: (draft) => draft,          // assemble the real tool's input
+    run: executeCreateTrip,           // the existing tool does the work
+  },
+});
+```
+
+- 2–5 steps. More means two journeys.
+- Steps reuse existing tools' `execute` functions; the submit's `run` is the
+  real write tool, so its confirmation and validation still apply.
+- The submit gate is the only write in a journey; step tools are reads or
+  draft-writes and stay read-only.
