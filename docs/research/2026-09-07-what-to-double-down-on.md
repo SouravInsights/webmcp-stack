@@ -322,23 +322,30 @@ confirmation gates, the naming rules, descriptions that say what a tool
 returns, nested untrusted-content marking, and `verify` with its scorecard
 and `--url` check.
 
-What's left, in order:
+Shipped 2026-09-10 on the journeys feature branch (feat/journeys):
 
-1. Spec sync quick wins (details: docs/research/2026-09-10-spec-sync.md):
-   emit `title`, auto-set `consequentialHint` on destructive tools, add the
-   `exposedTo` config pass-through, fix the Chrome 149 version claims in
-   three docs files. Template edits only.
-2. Close the budget gaps: the 500/150 description limits in generation and
-   `verify`, and the 1.5K output-truncation helper in the generated region.
-3. The skill file (`assets/skill/SKILL.md` — written, needs the scaffold
-   wiring) plus its eval harness.
-4. Journeys — ship the `createJourney` helper (`assets/journey.webmcp.ts` —
-   written, needs the scaffold wiring) and the verify checks for journey
-   files.
-5. The grouping step — intent-level tools by default, proposal in the
-   report.
-6. Delete the LLM layer (`--llm`, `--suggest`, shipped in 0.8) once the
-   skill file has shipped and nobody has complained.
+1. ~~Spec sync quick wins~~ — `title` emitted everywhere (tools and journey
+   gates), `consequentialHint` on destructive tools, `exposedTo` config
+   pass-through on the tools output, Chrome 149/150 version fixes.
+2. ~~Budgets~~ — generation composes within 500/150 (fitBudget, sentence
+   cuts), verify's new error-level Budgets check measures the final text,
+   the runtime caps every `toolResult` at ~1.5K with a truncation notice.
+3. ~~Skill file~~ — scaffolded at `.agents/skills/webmcp-tools/SKILL.md`
+   (cross-client location, Claude Code included), regenerated like the
+   runtime; eval harness at `packages/codegen/evals/skill/` with the
+   beenthere-lite fixture, nine cases, deterministic graders, and a passing
+   self-test (`node run.mjs --selftest`).
+4. ~~Journeys~~ — `journey.webmcp.ts` scaffolded next to the runtime, the
+   barrel registers every `<outDir>/journeys/*.webmcp.ts` it finds,
+   endpoint-backed tools emit the `fetchX` raw caller that steps compose,
+   and verify lints journey files (gate, budgets, step count, no raw fetch).
+5. ~~Grouping~~ — `groupHandshakes` merges POST handshake pairs
+   (request-upload + complete-upload → upload-media) with exact-name
+   threading only; the merged tool is a withheld draft, members untouched,
+   the CLI prints the proposal line.
+6. ~~LLM layer~~ — deleted: `--llm`, `--suggest`, the config options, the
+   provider flow, ~1,050 lines gone. The skill file is how rules reach
+   models now.
 
 Parked (out of scope for now): the audit-package extraction, the
 dashboard-as-report rework, and the paste-a-URL audit.
