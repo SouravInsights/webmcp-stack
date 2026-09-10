@@ -229,6 +229,14 @@ export function renderSummary(
   if (fileNotes.length > 6) {
     console.log(dim(`    …and ${fileNotes.length - 6} more (run with --verbose)`));
   }
+
+  // Pipeline proposals (groupings, renames): the run's "look at this" lines.
+  for (const note of result.notes.slice(0, 6)) {
+    console.log(`  ${c.cyan("◦")} ${note}`);
+  }
+  if (result.notes.length > 6) {
+    console.log(dim(`    …and ${result.notes.length - 6} more (run with --verbose)`));
+  }
   console.log("");
 
   // LLM proposals: visually distinct from findings (◦, cyan), because a

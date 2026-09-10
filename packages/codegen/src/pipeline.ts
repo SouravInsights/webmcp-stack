@@ -10,6 +10,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { describeCandidateInputs, describeCandidateTool } from "./describe.js";
+import { groupHandshakes } from "./group.js";
 import { pascalCase } from "./json-schema.js";
 import { runLlmLayer } from "./llm.js";
 import { mergeSchemaWithOperations } from "./merge.js";
@@ -131,6 +132,14 @@ export async function runGenerate(
     progress(`Renamed ${renames.length} tool${renames.length === 1 ? "" : "s"} for uniqueness`);
   }
 
+  // 4.5 Grouping: handshake endpoints (request-upload + complete-upload) are
+  //     one action the API split into two calls. The merged tool is a
+  //     withheld draft exactly like its members; the report names the
+  //     proposal, and adopting it is enabling it. Members stay untouched.
+  const grouped = groupHandshakes(named);
+  notes.push(...grouped.notes);
+  const groupedTools = grouped.tools;
+
   // Cross-run renames. The route ref is the durable identity; the name is
   // derived. When they drift apart (a better algorithm, a spec edit), the
   // tool's dashboard overrides are keyed by the old name and would silently
@@ -139,7 +148,7 @@ export async function runGenerate(
   const crossRenames: { from: string; to: string }[] = [];
   if (options.previousNames) {
     const nameByRef = new Map(Object.entries(options.previousNames).map(([n, r]) => [r, n]));
-    for (const tool of named) {
+    for (const tool of groupedTools) {
       const before = nameByRef.get(refOf(tool));
       if (before && before !== tool.name) crossRenames.push({ from: before, to: tool.name });
     }
@@ -159,12 +168,12 @@ export async function runGenerate(
       `${crossRenames.length} tool${crossRenames.length === 1 ? "" : "s"} renamed since the last run; their dashboard edits moved with them`,
     );
   }
-  const namesLedger = Object.fromEntries(named.map((tool) => [tool.name, refOf(tool)]));
+  const namesLedger = Object.fromEntries(groupedTools.map((tool) => [tool.name, refOf(tool)]));
 
   // 5. Safety review: classify side effects, compute hints, scan for PII,
   //    apply endpoint roles and config exclusions. Webhooks never come back.
   progress("Reviewing safety (classification, PII, auth)");
-  const { tools, skipped } = reviewTools(named, config.safety);
+  const { tools, skipped } = reviewTools(groupedTools, config.safety);
   const authCount = tools.filter((t) => t.endpointRole === "auth").length;
   const adminCount = tools.filter((t) => t.endpointRole === "admin").length;
   if (authCount > 0) progress(`Disabled ${authCount} auth endpoint${authCount === 1 ? "" : "s"}`);

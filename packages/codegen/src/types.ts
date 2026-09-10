@@ -94,6 +94,25 @@ export interface CandidateTool {
    */
   endpointRef?: string;
   /**
+   * For a grouped handshake tool: the two calls and how the first response
+   * feeds the second's inputs. Absent for ordinary single-endpoint tools.
+   */
+  compose?: {
+    first: {
+      httpMethod: NonNullable<CandidateTool["httpMethod"]>;
+      pathTemplate: string;
+      paramLocations: { path: string[]; query: string[]; body: string[] };
+      serverUrl?: string;
+    };
+    second: {
+      httpMethod: NonNullable<CandidateTool["httpMethod"]>;
+      pathTemplate: string;
+      paramLocations: { path: string[]; query: string[]; body: string[] };
+      serverUrl?: string;
+    };
+    threaded: Record<string, string>;
+  };
+  /**
    * Present when the tool annotates a literal <form> component instead of
    * generating a .webmcp.ts file. Set by the schema source from the entry's
    * `form` pointer; consumed by the `form` output.

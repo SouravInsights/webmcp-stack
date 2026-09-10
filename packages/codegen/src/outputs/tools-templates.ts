@@ -59,7 +59,8 @@ export function generatedRegion(
   // fence, so the only runtime helper its live code uses is toolDisabled in
   // the execute scaffold (a defensive refusal if someone registers it by hand).
   const withheld = tool.withheld && !enabled;
-  const hasRoute = Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
+  const hasRoute =
+    Boolean(tool.compose) || Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
   const runtimeImports = withheld
     ? hasRoute
       ? "callApi, toolDisabled"
@@ -170,8 +171,9 @@ export function generatedRegion(
           `/** The bare request, without the agent-facing result wrapping. Journeys`,
           ` * and your own code compose this; execute${pascal} is the agent-facing one. */`,
           `export async function fetch${pascal}(input: ${tool.inputTypeName}, signal?: AbortSignal) {`,
-          `  ${requestCall(tool)}`,
-          `  return data;`,
+          ...(tool.compose
+            ? composedFetchBody(tool.compose)
+            : [`  ${requestCall(tool)}`, `  return data;`]),
           `}`,
         ]
       : []),
@@ -226,7 +228,8 @@ export function generatedRegion(
  */
 export function ownedRegionScaffold(tool: ReviewedTool): string {
   const pascal = pascalCase(tool.name);
-  const hasRoute = Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
+  const hasRoute =
+    Boolean(tool.compose) || Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
   // Endpoint-backed tools compose the raw caller from the generated region
   // (fetchX), so the default execute stays one line and journeys reuse the
   // exact same request. Schema-only tools keep the honest TODO.
@@ -366,46 +369,103 @@ export function resolveApiBase(serverUrl: string | undefined): string | undefine
   }
 }
 
-function requestCall(tool: ReviewedTool): string {
-  if (!tool.httpMethod || !tool.pathTemplate || !tool.paramLocations) {
-    return `const data = null; // TODO: call your app's existing code here.`;
-  }
-
-  const { path: pathParams, query: queryParams, body: bodyParams } = tool.paramLocations;
+/**
+ * The arguments to one callApi(...): the path expression (template params
+ * interpolated, non-local server URLs kept) plus method/query/body/signal.
+ * `pathRef` says where each path param's value comes from — ordinary tools
+ * read `input`, the second call of a composed tool reads the first result.
+ */
+function buildCallExpr(options: {
+  httpMethod: string;
+  pathTemplate: string;
+  paramLocations: { path: string[]; query: string[]; body: string[] };
+  serverUrl?: string;
+  pathRef?: (param: string) => string;
+  skipFields?: Set<string>;
+}): string {
+  const {
+    httpMethod,
+    pathTemplate,
+    paramLocations,
+    serverUrl,
+    pathRef = inputRef,
+    skipFields = new Set<string>(),
+  } = options;
+  const { path: pathParams, query: queryParamsAll, body: bodyParamsAll } = paramLocations;
+  const queryParams = queryParamsAll.filter((name) => !skipFields.has(name));
+  const bodyParams = bodyParamsAll.filter((name) => !skipFields.has(name));
 
   // "/pets/{id}" → `/pets/${input.id}`. Params the schema knows by name.
-  let pathExpr = `\`${tool.pathTemplate.replace(/\{([^}]+)\}/g, (_m, param: string) => `\${${inputRef(param)}}`)}\``;
-  if (pathParams.length === 0) pathExpr = JSON.stringify(tool.pathTemplate);
+  let pathExpr = `\`${pathTemplate.replace(/\{([^}]+)\}/g, (_m, param: string) => `\${${pathRef(param)}}`)}\``;
+  if (pathParams.length === 0) pathExpr = JSON.stringify(pathTemplate);
 
   // Base URL: default to the page's own origin so a deployed app calls its
   // own API. Baking the spec's servers[0] (often http://localhost:3001) into
   // the generated fetch would make every deployed tool call the visitor's
   // own machine. A non-local public server URL is kept as the default base;
   // a local one is not.
-  const base = resolveApiBase(tool.serverUrl);
+  const base = resolveApiBase(serverUrl);
   if (base) {
     const b = base.endsWith("/") ? base.slice(0, -1) : base;
     pathExpr = `\`${b}\${${pathExpr}}\``;
   }
 
-  const options: string[] = [`method: ${JSON.stringify(tool.httpMethod)}`];
+  const args: string[] = [`method: ${JSON.stringify(httpMethod)}`];
   if (queryParams.length > 0) {
     const entries = queryParams.map((name) => `${safeKey(name)}: ${inputRef(name)}`).join(", ");
-    options.push(`query: { ${entries} }`);
+    args.push(`query: { ${entries} }`);
   }
   if (bodyParams.length > 0) {
     if (bodyParams.length === 1 && bodyParams[0] === "body") {
       // A non-object request body arrives as a single "body" field.
-      options.push(`body: input.body`);
+      args.push(`body: input.body`);
     } else {
       const entries = bodyParams.map((name) => `${safeKey(name)}: ${inputRef(name)}`).join(", ");
-      options.push(`body: { ${entries} }`);
+      args.push(`body: { ${entries} }`);
     }
   }
   // The execute context's signal reaches fetch, so a cancelled call stops.
-  options.push("signal");
+  args.push("signal");
 
-  return `const data = await callApi(${pathExpr}, { ${options.join(", ")} });`;
+  return `${pathExpr}, { ${args.join(", ")} }`;
+}
+
+function requestCall(tool: ReviewedTool): string {
+  if (!tool.httpMethod || !tool.pathTemplate || !tool.paramLocations) {
+    return `const data = null; // TODO: call your app's existing code here.`;
+  }
+  return `const data = await callApi(${buildCallExpr({
+    httpMethod: tool.httpMethod,
+    pathTemplate: tool.pathTemplate,
+    paramLocations: tool.paramLocations,
+    serverUrl: tool.serverUrl,
+  })});`;
+}
+
+/** "uploadId" on the first response: dot access when the name allows it. */
+function firstResultRef(param: string): string {
+  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(param)
+    ? `firstResult.${param}`
+    : `firstResult[${JSON.stringify(param)}]`;
+}
+
+/**
+ * The two calls of a grouped handshake tool: the first request runs, its
+ * response fields fill the second request's path params by exact name, and
+ * the second response is the tool's result. Threaded fields never reach the
+ * agent-facing input — that's the point of the composition.
+ */
+function composedFetchBody(plan: NonNullable<ReviewedTool["compose"]>): string[] {
+  const threaded = new Set(Object.keys(plan.threaded));
+  return [
+    `  const firstResult = (await callApi(${buildCallExpr(plan.first)})) as Record<string, unknown>;`,
+    `  const data = await callApi(${buildCallExpr({
+      ...plan.second,
+      pathRef: (param) => (threaded.has(param) ? firstResultRef(param) : inputRef(param)),
+      skipFields: threaded,
+    })});`,
+    `  return data;`,
+  ];
 }
 
 /**
