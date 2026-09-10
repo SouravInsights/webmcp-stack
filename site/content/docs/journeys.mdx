@@ -1,0 +1,162 @@
+---
+title: Journeys
+description: Some goals take several tool calls with shared state and one confirmed write at the end. A journey is that shape — here's exactly what ships, what you write, and what a real agent session looks like.
+---
+
+# Journeys
+
+Some things a user asks an agent to do can't be one tool call. "Log the trip I
+took to Lisbon" means: find the real place, set the title and dates, then create
+the trip — and only a human should be able to say yes to that last part. A
+journey is that shape: **a few steps that share state, and one guarded submit at
+the end.**
+
+A journey is made of three pieces:
+
+1. **The draft** — one plain object in the page's memory. Think whiteboard, not
+   filing cabinet: steps write their results on it, the submit reads from it,
+   and it's wiped clean when the page reloads. No database, no files, nothing
+   saved anywhere.
+2. **Step tools** — each step becomes its own ordinary WebMCP tool. Calling one
+   stores what it produced into the draft and replies with what's still missing,
+   so the agent always knows the next move.
+3. **The submit gate** — one final tool that refuses until every step has
+   delivered, asks the human to confirm, and only then makes the real write —
+   using only what's in the draft. Afterward the draft resets to empty.
+
+## A real session, start to finish
+
+beenthere.page is a journal for trips you've been on. Its journey for the core
+flow is called `document-trip`, with two steps and a submit. Here's the complete
+session — a signed-in user on their profile page, an agent in the browser, and
+one sentence from the user: *"Log the trip I took to Lisbon last March."*
+
+**Page load.** The page registers its tools. Alongside the ordinary ones, three
+journey tools appear: `document-trip-search-places`, `document-trip-set-details`,
+and `document-trip-submit`. There's no special channel for journeys — the agent
+sees one flat list and learns these belong together from their names and
+descriptions, which the machinery stamps mechanically: *"Search real places and
+store the pick. Part of document-trip: Record a trip you've been on…"*
+
+**Step 1.** The agent calls `document-trip-search-places` with
+`{ input: "Lisbon" }`. That hits the real backend search, and the resolved place
+— a structured object with a `placeId`, address, country — lands in the draft.
+This matters more than it looks: the create-trip endpoint needs that object, and
+an agent can't invent it. Now it comes from the server, not from a guess. The
+tool replies: *"Stored. Still needed: document-trip-set-details."*
+
+**Step 2.** The agent calls `document-trip-set-details` with
+`{ title: "Lisbon, March 2026", startDate: "2026-03-14" }`. No backend call —
+the values are stored on the draft as-is. The tool replies: *"Stored. The
+journey is ready — call document-trip-submit."*
+
+**The submit.** The agent calls `document-trip-submit`. The gate checks the
+draft: `locationObject` present, `title` present — nothing missing. Then the
+page shows a real confirmation dialog: *"Allow the agent to: Create the trip and
+open it in the editor."* Only a human click can pass this — the agent cannot
+approve it for you.
+
+**Approved.** The real `create-trip` call fires, with input assembled from the
+draft and nothing else. The draft resets to empty. The app does what it does
+when you click the button yourself: the trip is created and the editor opens on
+it. The agent turns back to the user: "Created and opened — want me to draft the
+story from your photos?"
+
+If the human declines, nothing is wiped: the draft stays, and the agent is told
+the user declined. And if the tab closes mid-journey, the draft simply
+evaporates — a half-finished journey never lingers.
+
+The division of labor, the whole session: the agent orchestrates and talks to
+the user; the human does exactly one thing — approve or deny at the end.
+
+## What codegen ships vs. what you write
+
+Codegen ships the machinery, never the journeys:
+
+- **`journey.webmcp.ts`** — the `createJourney` helper, copied into your repo on
+  every `generate`, next to `runtime.webmcp.ts`. It's generator-owned: don't
+  hand-edit it; regeneration overwrites it. The draft, the step registration,
+  the gate, the confirmation — all of it lives here, once, for every journey.
+- **Registration** — the generated `index.ts` auto-imports everything in your
+  `journeys/` folder and registers it. Drop in a new journey file, it's live.
+- **Checks** — `verify` validates journey files: submit gate present, steps
+  described within budget, step count small enough for an agent to track, and no
+  direct `fetch` bypassing your generated tools.
+
+What codegen never writes is the journey itself — an OpenAPI spec can't reveal
+that "create a trip" is really search → details → confirm. Only the product side
+knows the flow. So you write one small file per journey (or your coding agent
+does, guided by the bundled skill file):
+
+```ts
+// journeys/document-trip.webmcp.ts
+import { createJourney } from "../webmcp/journey.webmcp";
+import { getAutocompleteTool, fetchGetAutocomplete } from "../get-autocomplete.webmcp";
+import { executeCreateTrip, type CreateTripInput } from "../create-trip.webmcp";
+
+export const documentTrip = createJourney({
+  name: "document-trip",
+  goal: "Record a trip you've been on and open the editor to write its story",
+  steps: {
+    // A tool-backed step: inherits the generated tool's description and
+    // schema, calls its raw caller. You write only what lands in the draft.
+    "search-places": {
+      tool: getAutocompleteTool,
+      call: (input, signal) => fetchGetAutocomplete({ input: String(input.input) }, signal),
+      store: (places) => ({ locationObject: places }), // the resolved pick
+      provides: ["locationObject"],
+    },
+    // A freeform step: no backend call — collects input into the draft.
+    "set-details": {
+      description: "Set the trip's title and dates.",
+      input: {
+        type: "object",
+        properties: { title: { type: "string" }, startDate: { type: "string" } },
+        required: ["title"],
+      },
+      provides: ["title"],
+    },
+  },
+  submit: {
+    description: "Create the trip and open it in the editor.",
+    build: (draft) => draft as CreateTripInput, // assemble the real tool's input
+    run: executeCreateTrip,                     // the existing tool does the work
+  },
+});
+```
+
+## Rules worth knowing
+
+(Every "wait, but what if…" these rules raise is answered plainly in
+[Journey questions, answered](/docs/journeys-faq).)
+
+- **Journeys reuse your generated tools; they don't replace them.** A
+  tool-backed step inherits the tool's contract and calls the same underlying
+  request — nothing is reimplemented. Edit the tool, regenerate, and the journey
+  follows.
+- **A tool that only makes sense inside a flow shouldn't be registered on its
+  own.** `get-trip-stamp-eligibility` is meaningless outside the stamp flow, so
+  it lives only as a journey step. And a risky write — like `create-trip` —
+  stays withheld as a standalone tool forever; the journey's submit gate becomes
+  its only public door. Journeys should shrink the surface an agent sees, not
+  grow it.
+- **The safety doesn't depend on the journey file.** The gate, the confirmation,
+  and the draft clearing are enforced by the shared helper, not by anything you
+  write in the definition. A journey file can be written sloppily; it can't
+  skip the human's yes.
+- **The draft is per page load, per journey.** Within one continuous page view
+  it's fully reliable. Across a reload, it's gone — deliberately. Two parallel
+  attempts at the same journey on one page would share one draft; in practice
+  agents work one thing at a time, so this is accepted, not handled.
+- **Keep journeys short.** Two to five steps. If you're past five, you're
+  describing two journeys.
+
+## Grouping is a different thing
+
+Don't confuse journeys with what the generator's grouping does. Grouping
+*merges*: endpoints that are one action split by API shape (a request-upload
+call and a complete-upload call) become a single coarse tool — it happens at
+generate time, straight from the spec. Journeys *chain*: different decisions
+with shared state and a guarded submit, written per-product after generation.
+Same action split across calls → that's grouping. Different decisions along the
+way → that's a journey.
