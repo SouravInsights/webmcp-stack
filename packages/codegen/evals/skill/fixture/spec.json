@@ -1,0 +1,113 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "beenthere-lite", "version": "1.0.0" },
+  "paths": {
+    "/v1/places/autocomplete": {
+      "get": {
+        "operationId": "getAutocomplete",
+        "summary": "Search places by free text.",
+        "parameters": [
+          {
+            "name": "input",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "description": "The place search text, e.g. Lisbon." }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "placeId": { "type": "string" },
+                      "fullAddress": { "type": "string" },
+                      "types": { "type": "array", "items": { "type": "string" } },
+                      "country": { "type": "string" },
+                      "lat": { "type": "number" },
+                      "lng": { "type": "number" },
+                      "name": { "type": "string" }
+                    },
+                    "required": ["placeId", "fullAddress", "types", "country", "lat", "lng", "name"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/": {
+      "get": {
+        "operationId": "listTrips",
+        "summary": "List the signed-in user's trips.",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": { "id": { "type": "string" }, "title": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTrip",
+        "summary": "Create a new trip.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string", "description": "The trip's display title." },
+                  "startDate": { "type": "string", "format": "date" },
+                  "locationObject": {
+                    "type": "object",
+                    "description": "The resolved place from the autocomplete endpoint.",
+                    "properties": {
+                      "placeId": { "type": "string" },
+                      "fullAddress": { "type": "string" },
+                      "types": { "type": "array", "items": { "type": "string" } },
+                      "country": { "type": "string" },
+                      "lat": { "type": "number" },
+                      "lng": { "type": "number" },
+                      "name": { "type": "string" }
+                    },
+                    "required": ["placeId", "fullAddress", "types", "country", "lat", "lng", "name"]
+                  }
+                },
+                "required": ["title", "locationObject"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "id": { "type": "string" }, "title": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
