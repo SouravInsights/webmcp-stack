@@ -81,21 +81,22 @@ be gated (an eligibility check before a paid generation). Pattern:
 
 ```ts
 import { createJourney } from "../webmcp/journey.webmcp";
+import { getAutocompleteTool, fetchGetAutocomplete } from "../get-autocomplete.webmcp";
+import { executeCreateTrip, type CreateTripInput } from "../create-trip.webmcp";
 
 export const documentTrip = createJourney({
   name: "document-trip",
   goal: "Record a trip you've been on and open the editor to write its story",
   steps: {
+    // Tool-backed step: inherits the generated tool's description and schema;
+    // you write only what lands in the draft.
     "search-places": {
-      description: "Search real places and store the pick.",
-      input: { type: "object", properties: { input: { type: "string" } }, required: ["input"] },
+      tool: getAutocompleteTool,
+      call: (input, signal) => fetchGetAutocomplete({ input: String(input.input) }, signal),
+      store: (places) => ({ locationObject: places }), // store the resolved pick
       provides: ["locationObject"],
-      run: async (input, signal) => {
-        const res = await executeGetAutocomplete({ input: String(input.input) }, signal);
-        // Store the resolved place the user picked from the results:
-        return { locationObject: res };
-      },
     },
+    // Freeform step: no backend call — collects input straight into the draft.
     "set-details": {
       description: "Set the trip's title and dates.",
       input: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
@@ -104,14 +105,16 @@ export const documentTrip = createJourney({
   },
   submit: {
     description: "Create the trip and open it in the editor.",
-    build: (draft) => draft,          // assemble the real tool's input
-    run: executeCreateTrip,           // the existing tool does the work
+    build: (draft) => draft as CreateTripInput,  // assemble the real tool's input
+    run: executeCreateTrip,                      // the existing tool does the work
   },
 });
 ```
 
 - 2–5 steps. More means two journeys.
-- Steps reuse existing tools' `execute` functions; the submit's `run` is the
-  real write tool, so its confirmation and validation still apply.
+- Tool-backed steps reuse the generated tool's contract and its raw caller
+  (`fetchX`); the submit's `run` is the real write tool's `execute`, so its
+  confirmation and validation still apply. Never write a direct `fetch` in a
+  journey file — `verify` flags it.
 - The submit gate is the only write in a journey; step tools are reads or
   draft-writes and stay read-only.

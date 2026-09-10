@@ -35,24 +35,45 @@ import {
 
 type Json = Record<string, unknown>;
 
-export interface JourneyStep {
-  /** What the agent reads, e.g. "Search real places and store the pick." */
-  description: string;
-  /** The step's input fields, as a JSON Schema object. */
-  input: Json;
+/**
+ * A step backed by an existing generated tool. The step inherits the tool's
+ * description and input schema — the definition lives in one place — and
+ * calls the raw caller the generated file exports (fetchGetAutocomplete,
+ * not the agent-facing execute wrapper). You write only what's new: which
+ * slice of the result lands in the draft.
+ */
+export interface ToolStep {
+  /** The generated tool object, e.g. getAutocompleteTool. */
+  tool: { description?: string; inputSchema?: Json };
   /**
-   * Draft fields this step leaves behind. Submit refuses until every step's
-   * fields are present. A step with no `run` stores its input verbatim.
+   * The raw caller the generated file exports. Receives the step's input
+   * plus the draft so far, so a later step can feed on an earlier one's
+   * stored fields.
    */
+  call: (input: Json, signal: AbortSignal | undefined, draft: Readonly<Json>) => Promise<unknown>;
+  /** Map the call's result into the draft fields this step leaves behind. */
+  store: (result: unknown) => Json;
+  /** Draft fields this step leaves behind. Submit waits for all of them. */
   provides: string[];
-  /**
-   * What the step does with its input — usually calling an existing tool's
-   * execute. Receives the draft so far (a later step needs what an earlier
-   * one stored) and must return the draft fields to store.
-   * Default: store the input verbatim.
-   */
+  /** Override the agent-facing description. Default: the tool's own. */
+  description?: string;
+  /** Override the agent-facing input schema. Default: the tool's own. */
+  input?: Json;
+}
+
+/**
+ * A step with no backend call of its own — it collects input into the draft
+ * ("set the title and dates"). With a `run`, it can do work first; whatever
+ * `run` returns is stored. Without one, the input is stored verbatim.
+ */
+export interface FreeStep {
+  description: string;
+  input: Json;
+  provides: string[];
   run?: (input: Json, signal: AbortSignal | undefined, draft: Readonly<Json>) => Promise<Json>;
 }
+
+export type JourneyStep = ToolStep | FreeStep;
 
 export interface JourneyDef {
   /** Journey name; step tools derive from it ("document-trip-search-places"). */
@@ -70,6 +91,10 @@ export interface JourneyDef {
   };
 }
 
+function isToolStep(step: JourneyStep): step is ToolStep {
+  return "tool" in step;
+}
+
 export function createJourney(def: JourneyDef) {
   const modelContext = getModelContext();
 
@@ -85,21 +110,41 @@ export function createJourney(def: JourneyDef) {
     );
   }
 
+  function stepDescription(step: JourneyStep): string {
+    const base =
+      step.description ?? (isToolStep(step) ? step.tool.description : undefined) ?? "Journey step.";
+    return `${base} Part of "${def.name}": ${def.goal}`;
+  }
+
+  function stepInput(step: JourneyStep): Json {
+    if (step.input) return step.input;
+    if (isToolStep(step) && step.tool.inputSchema) return step.tool.inputSchema;
+    return { type: "object", properties: {} };
+  }
+
+  /** Run one step and store what it produced. */
+  async function runStep(step: JourneyStep, input: Json, signal?: AbortSignal): Promise<void> {
+    if (isToolStep(step)) {
+      const result = await step.call(input, signal, { ...draft });
+      Object.assign(draft, step.store(result));
+      return;
+    }
+    const stored = step.run ? await step.run(input, signal, { ...draft }) : input;
+    Object.assign(draft, stored);
+  }
+
   async function registerSteps(signal?: AbortSignal): Promise<void> {
     if (!modelContext) return;
     for (const [key, step] of Object.entries(def.steps)) {
       await modelContext.registerTool(
         {
           name: `${def.name}-${key}`,
-          description: `${step.description} Part of "${def.name}": ${def.goal}`,
-          inputSchema: step.input,
+          description: stepDescription(step),
+          inputSchema: stepInput(step),
           annotations: { readOnlyHint: true },
           execute: async (input, context) => {
             try {
-              const stored = step.run
-                ? await step.run(input as Json, context?.signal, { ...draft })
-                : (input as Json);
-              Object.assign(draft, stored);
+              await runStep(step, input as Json, context?.signal);
               const left = missing();
               return toolResult(
                 left.length === 0
