@@ -4,8 +4,33 @@ import {
   describeCandidateTool,
   describeConstraints,
   describeField,
+  FIELD_DESCRIPTION_MAX,
+  fitBudget,
+  TOOL_DESCRIPTION_MAX,
 } from "./describe.js";
 import type { CandidateTool } from "./types.js";
+
+describe("fitBudget", () => {
+  it("passes text that fits through untouched", () => {
+    expect(fitBudget("Short text.", 150)).toBe("Short text.");
+  });
+
+  it("cuts overflow at a sentence boundary when one keeps most of the text", () => {
+    const text = `${"First sentence that goes on for a while. ".repeat(3)}Second sentence trails off at the very end with no stop`;
+    const fitted = fitBudget(text, 150);
+    expect(fitted.length).toBeLessThanOrEqual(150);
+    expect(fitted.endsWith(".")).toBe(true);
+    expect(fitted).not.toContain("Second sentence");
+  });
+
+  it("hard-cuts at a word boundary with an ellipsis when no good sentence break exists", () => {
+    const text = "a b c d e f g h i j k l m n o p q r s t u v w x y z ".repeat(6) + "end";
+    const fitted = fitBudget(text, 150);
+    expect(fitted.length).toBeLessThanOrEqual(150);
+    expect(fitted.endsWith("…")).toBe(true);
+    expect(fitted).not.toContain("end");
+  });
+});
 
 describe("describeConstraints", () => {
   it("renders a number range the way the WebMCP docs do", () => {
@@ -403,5 +428,28 @@ describe("describeCandidateInputs through nullable wrappers", () => {
       "A short biography shown on the profile.",
     );
     expect(candidate.synthesizedFields).toEqual([]);
+  });
+});
+
+describe("description budgets", () => {
+  it("caps author field text at the 150-character parameter budget", () => {
+    const result = describeField("notes", {
+      type: "string",
+      description: `The notes field of the record. ${"More detail about things. ".repeat(9)}`,
+    });
+    expect(result.description.length).toBeLessThanOrEqual(FIELD_DESCRIPTION_MAX);
+    expect(result.description.startsWith("The notes field of the record.")).toBe(true);
+    expect(result.synthesized).toBe(false);
+  });
+
+  it("caps the assembled tool description at the 500-character budget", () => {
+    const candidate = {
+      name: "list-trips",
+      description: `List the trips. ${"A long explanation of everything this endpoint could ever do. ".repeat(12)}`,
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "array" },
+    } as unknown as CandidateTool;
+    describeCandidateTool(candidate);
+    expect(candidate.description.length).toBeLessThanOrEqual(TOOL_DESCRIPTION_MAX);
   });
 });

@@ -28,6 +28,31 @@
 import pluralize from "pluralize";
 import type { CandidateTool, JsonSchema } from "./types.js";
 
+/** Chrome's published description budgets: 500 per tool, 150 per parameter. */
+export const TOOL_DESCRIPTION_MAX = 500;
+export const FIELD_DESCRIPTION_MAX = 150;
+
+/**
+ * Fit text to a character budget. A text that fits passes through untouched.
+ * One that overflows is cut at the last sentence boundary that keeps at
+ * least half the budget (a cut near the end keeps the author's thought, at
+ * the price of trailing sentences); otherwise it hard-cuts at a word
+ * boundary and ends with an ellipsis. Composed text is always budget-safe
+ * before it leaves this module, and verify measures the final result.
+ */
+export function fitBudget(text: string, budget: number): string {
+  if (text.length <= budget) return text;
+  const slice = text.slice(0, budget);
+  const sentenceEnd = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? "),
+  );
+  if (sentenceEnd >= Math.floor(budget / 2)) return slice.slice(0, sentenceEnd + 1);
+  const wordEnd = slice.lastIndexOf(" ");
+  return `${(wordEnd > 0 ? slice.slice(0, wordEnd) : slice).trimEnd()}…`;
+}
+
 /**
  * Render a schema's constraints as plain-language sentences, or "" when there
  * is nothing worth saying. The wording mirrors the examples in Chrome's WebMCP
@@ -256,34 +281,47 @@ export function describeField(
   const authorText = raw && !isStubDescription(raw) ? raw : "";
   const constraints = describeConstraints(schema);
 
+  let result: { description: string; synthesized: boolean };
+
   if (authorText) {
     const needsConstraints = constraints && !alreadyStatesConstraints(authorText, schema);
-    return {
+    result = {
       description: needsConstraints ? `${authorText} ${constraints}` : authorText,
       synthesized: false,
     };
+  } else {
+    // A conventional name ("tripId", "coverImageUrl") reads as a real sentence;
+    // that beats the bare humanized name because it says what the name only
+    // hints at. Anything else gets the name plus whatever the schema proves.
+    const nameText = humanizeFieldName(name);
+    const pattern = patternSentence(name, schema, context?.noun);
+    if (pattern) {
+      const suffix = constraints || FORMAT_SENTENCES[schema.format ?? ""] || "";
+      result = { description: suffix ? `${pattern} ${suffix}` : pattern, synthesized: true };
+    } else {
+      const format = FORMAT_SENTENCES[schema.format ?? ""];
+      // "Email. An email address." says one thing twice: when the format sentence
+      // already carries the noun, it is the draft on its own.
+      if (
+        format &&
+        constraints === format &&
+        format.toLowerCase().includes(nameText.toLowerCase())
+      ) {
+        result = { description: format, synthesized: true };
+      } else {
+        const draft =
+          format && !constraints
+            ? `${nameText} (${format.replace(/^An?\s+/i, "").replace(/\.$/, "")}).`
+            : `${nameText}.${constraints ? ` ${constraints}` : ""}`;
+        result = { description: draft, synthesized: true };
+      }
+    }
   }
 
-  // A conventional name ("tripId", "coverImageUrl") reads as a real sentence;
-  // that beats the bare humanized name because it says what the name only
-  // hints at. Anything else gets the name plus whatever the schema proves.
-  const nameText = humanizeFieldName(name);
-  const pattern = patternSentence(name, schema, context?.noun);
-  if (pattern) {
-    const suffix = constraints || FORMAT_SENTENCES[schema.format ?? ""] || "";
-    return { description: suffix ? `${pattern} ${suffix}` : pattern, synthesized: true };
-  }
-  const format = FORMAT_SENTENCES[schema.format ?? ""];
-  // "Email. An email address." says one thing twice: when the format sentence
-  // already carries the noun, it is the draft on its own.
-  if (format && constraints === format && format.toLowerCase().includes(nameText.toLowerCase())) {
-    return { description: format, synthesized: true };
-  }
-  const draft =
-    format && !constraints
-      ? `${nameText} (${format.replace(/^An?\s+/i, "").replace(/\.$/, "")}).`
-      : `${nameText}.${constraints ? ` ${constraints}` : ""}`;
-  return { description: draft, synthesized: true };
+  // The 150-character parameter budget applies to the final text, author or
+  // machine: overflow is cut at a sentence boundary (see fitBudget).
+  result.description = fitBudget(result.description, FIELD_DESCRIPTION_MAX);
+  return result;
 }
 
 /**
@@ -427,5 +465,10 @@ export function describeCandidateTool(candidate: CandidateTool): void {
       : "";
   // The join is between sentences: the base earns its period first.
   const base = returns && !/[.!?]$/.test(normalized) ? `${normalized}.` : normalized;
-  candidate.description = [base, returns].filter(Boolean).join(" ");
+  // The 500-character tool budget applies to the final text, author or
+  // machine: overflow is cut at a sentence boundary (see fitBudget).
+  candidate.description = fitBudget(
+    [base, returns].filter(Boolean).join(" "),
+    TOOL_DESCRIPTION_MAX,
+  );
 }

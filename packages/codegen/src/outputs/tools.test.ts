@@ -58,6 +58,13 @@ describe("js generator", () => {
     await rm(cwd, { recursive: true, force: true });
   });
 
+  it("caps tool results at the 1.5K output budget in the shared runtime", async () => {
+    const files = await tools({ outDir: "src/webmcp" }).generate([reviewedTool()], cwd);
+    const runtime = files.find((file) => file.path.endsWith("runtime.webmcp.ts"));
+    expect(runtime?.contents).toContain("TOOL_OUTPUT_MAX");
+    expect(runtime?.contents).toContain("truncated to fit the 1.5K output budget");
+  });
+
   it("emits a runtime, a barrel, and one file per tool", async () => {
     const files = await tools({ outDir: "src/webmcp" }).generate([reviewedTool()], cwd);
     const paths = files.map((file) => file.path);

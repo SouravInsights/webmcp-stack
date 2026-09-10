@@ -504,12 +504,27 @@ export async function callApi(
   }
 }
 
-/** Wrap a result in the MCP shape, so tool bodies stay one line. */
+/** Chrome's output budget: one tool result stays under ~1.5K characters. */
+const TOOL_OUTPUT_MAX = 1536;
+
+const TRUNCATED_NOTICE =
+  "\n… [truncated to fit the 1.5K output budget — return a smaller slice or paginate]";
+
+/**
+ * Wrap a result in the MCP shape, so tool bodies stay one line. The result
+ * text is capped at Chrome's ~1.5K per-call output budget: oversized payloads
+ * cost the agent context and can trip guardrails, so they are cut with a
+ * notice rather than delivered whole. The cap lives here in the shared
+ * runtime, so it cannot be edited away per tool.
+ */
 export function toolResult(data: unknown): WebMcpToolResult {
+  const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  const fitted =
+    text.length <= TOOL_OUTPUT_MAX
+      ? text
+      : text.slice(0, TOOL_OUTPUT_MAX - TRUNCATED_NOTICE.length) + TRUNCATED_NOTICE;
   return {
-    content: [
-      { type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) },
-    ],
+    content: [{ type: "text", text: fitted }],
   };
 }
 
