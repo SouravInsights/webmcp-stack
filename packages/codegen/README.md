@@ -150,7 +150,7 @@ export default defineConfig({
 ## Requirements
 
 - Node.js ≥ 20
-- To *use* the generated tools in a browser: Chrome 146+ with `#enable-webmcp-testing` (or the WebMCP polyfill)
+- To *use* the generated tools in a browser: enable `chrome://flags/#enable-webmcp-testing` for local development (Chrome 149+, Edge 150+); production pages join the WebMCP origin trial — or use the WebMCP polyfill
 
 ## License
 

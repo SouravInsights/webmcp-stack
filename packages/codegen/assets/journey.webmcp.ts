@@ -95,6 +95,15 @@ function isToolStep(step: JourneyStep): step is ToolStep {
   return "tool" in step;
 }
 
+/** "document-trip-search-places" → "Document Trip Search Places" (native UIs). */
+function toTitle(kebab: string): string {
+  return kebab
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function createJourney(def: JourneyDef) {
   const modelContext = getModelContext();
 
@@ -139,6 +148,7 @@ export function createJourney(def: JourneyDef) {
       await modelContext.registerTool(
         {
           name: `${def.name}-${key}`,
+          title: toTitle(`${def.name}-${key}`),
           description: stepDescription(step),
           inputSchema: stepInput(step),
           annotations: { readOnlyHint: true },
@@ -166,9 +176,10 @@ export function createJourney(def: JourneyDef) {
     await modelContext.registerTool(
       {
         name: `${def.name}-submit`,
+        title: toTitle(`${def.name}-submit`),
         description: def.submit.description,
         inputSchema: { type: "object", properties: {} },
-        annotations: { readOnlyHint: false },
+        annotations: { readOnlyHint: false, consequentialHint: true },
         execute: async (_input, context) => {
           context?.signal?.throwIfAborted();
           const left = missing();

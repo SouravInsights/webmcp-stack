@@ -42,6 +42,13 @@ import {
 export interface ToolsOutputOptions {
   /** Where the tool files go, relative to the project root. */
   outDir: string;
+  /**
+   * The spec's `exposedTo`: secure origins (embedded documents at these
+   * origins) the registered tools are shared with. Absent means the default —
+   * tools are visible to the page itself, same-origin documents, and the
+   * browser's built-in agent. Only list origins you trust to act for your user.
+   */
+  exposedTo?: string[];
 }
 
 /**
@@ -119,6 +126,7 @@ export function tools(options: ToolsOutputOptions): Output {
               existing.get(sourcePath),
               atOwnPath !== undefined && sourcePath !== ownPath,
               notes,
+              options.exposedTo,
             ),
           );
         } else if (atOwnPath !== undefined) {
@@ -134,10 +142,10 @@ export function tools(options: ToolsOutputOptions): Output {
           ];
           files.push(aside);
           consumedPaths.add(ownPath);
-          files.push(toolFile(tool, ownPath, undefined, true, notes));
+          files.push(toolFile(tool, ownPath, undefined, true, notes, options.exposedTo));
         } else {
           // Brand new tool: lay down the execute() scaffold with it.
-          files.push(toolFile(tool, ownPath, undefined, false, notes));
+          files.push(toolFile(tool, ownPath, undefined, false, notes, options.exposedTo));
         }
       }
 
@@ -194,8 +202,9 @@ function toolFile(
   existing: string | undefined,
   targetOccupied: boolean,
   notes: string[],
+  exposedTo?: string[],
 ): GeneratedFile {
-  const head = generatedRegion(tool);
+  const head = generatedRegion(tool, { exposedTo });
 
   if (existing === undefined) {
     return {

@@ -33,12 +33,22 @@ import { GENERATED_END, GENERATED_START } from "./tools.js";
  * track the API contract exactly: name, description, schema, input type,
  * hints, and the register() wrapper.
  */
-export function generatedRegion(tool: ReviewedTool): string {
+export function generatedRegion(
+  tool: ReviewedTool,
+  registration?: { exposedTo?: string[] },
+): string {
   const pascal = pascalCase(tool.name);
   const camel = lowercaseFirst(pascal);
   const schemaJson = JSON.stringify(tool.inputSchema, null, 2);
   const inputType = jsonSchemaToTs(tool.inputSchema, undefined);
   const mutates = tool.riskTier !== "safe-read";
+
+  // The second registerTool() argument: the AbortSignal always, plus the
+  // configured origin exposure when the app shares tools with trusted
+  // embedded documents (the spec's exposedTo).
+  const registrationOptions = registration?.exposedTo?.length
+    ? `{ signal, exposedTo: ${JSON.stringify(registration.exposedTo)} },`
+    : `{ signal },`;
 
   // Import only what this file's regions actually use, so generated files
   // pass strict lint configs (no-unused-vars errors fail Next.js builds).
@@ -89,7 +99,7 @@ export function generatedRegion(tool: ReviewedTool): string {
         `        }`,
         `      },`,
         `    },`,
-        `    { signal },`,
+        `    ${registrationOptions}`,
         `  );`,
       ]
     : [
@@ -106,7 +116,7 @@ export function generatedRegion(tool: ReviewedTool): string {
         `        }`,
         `      },`,
         `    },`,
-        `    { signal },`,
+        `    ${registrationOptions}`,
         `  );`,
       ];
 
@@ -141,11 +151,13 @@ export function generatedRegion(tool: ReviewedTool): string {
     `/** The tool definition, minus \`execute\` (which is yours, below the marker). */`,
     `export const ${camel}Tool = {`,
     `  name: ${JSON.stringify(tool.name)},`,
+    `  title: ${JSON.stringify(titleFromName(tool.name))},`,
     `  description: ${JSON.stringify(tool.description)},`,
     `  inputSchema: ${camel}InputSchema,`,
     `  annotations: {`,
     `    readOnlyHint: ${tool.hints.readOnlyHint},`,
     `    untrustedContentHint: ${tool.hints.untrustedContentHint},`,
+    `    consequentialHint: ${tool.riskTier === "destructive-confirm"},`,
     `  },`,
     `};`,
     ``,
@@ -408,10 +420,16 @@ export interface WebMcpToolResult {
 /** A tool as the browser runtime understands it. */
 export interface WebMcpToolDefinition {
   name: string;
+  /** A human-facing label for native UIs (the spec's USVString title). */
+  title?: string;
   description: string;
   inputSchema?: Record<string, unknown>;
   /** Hints the agent reads to decide how careful to be with this tool. */
-  annotations?: { readOnlyHint?: boolean; untrustedContentHint?: boolean };
+  annotations?: {
+    readOnlyHint?: boolean;
+    untrustedContentHint?: boolean;
+    consequentialHint?: boolean;
+  };
   execute: (
     input: Record<string, unknown>,
     context?: { signal?: AbortSignal },
@@ -422,7 +440,7 @@ export interface WebMcpToolDefinition {
 export interface ModelContext {
   registerTool(
     tool: WebMcpToolDefinition,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; exposedTo?: string[] },
   ): Promise<void>;
 }
 
@@ -580,6 +598,18 @@ export async function registerAllTools(signal?: AbortSignal): Promise<void> {
 }
 
 /** "GetOrderStatus" → "getOrderStatus" (for the generated const names). */
+/**
+ * The spec's human-facing `title`: "list-trips" → "List Trips". Derived from
+ * the name so the two never disagree.
+ */
+function titleFromName(name: string): string {
+  return name
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function lowercaseFirst(pascal: string): string {
   return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }

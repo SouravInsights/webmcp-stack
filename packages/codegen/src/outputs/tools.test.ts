@@ -175,6 +175,38 @@ describe("js generator", () => {
     expect(tool?.contents).toContain("untrustedContentHint: true");
   });
 
+  it("emits a human-facing title and marks destructive tools consequential", async () => {
+    const files = await tools({ outDir: "src/webmcp" }).generate(
+      [
+        reviewedTool(),
+        reviewedTool({
+          name: "delete-order",
+          httpMethod: "DELETE",
+          riskTier: "destructive-confirm",
+          sideEffect: "write",
+          enabledByDefault: false,
+          withheld: true,
+        }),
+      ],
+      cwd,
+    );
+    const read = files.find((file) => file.path.includes("get-order-status"));
+    const destructive = files.find((file) => file.path.includes("delete-order"));
+    expect(read?.contents).toContain('title: "Get Order Status"');
+    expect(read?.contents).toContain("consequentialHint: false");
+    expect(destructive?.contents).toContain('title: "Delete Order"');
+    expect(destructive?.contents).toContain("consequentialHint: true");
+  });
+
+  it("passes configured exposedTo origins to registerTool", async () => {
+    const files = await tools({
+      outDir: "src/webmcp",
+      exposedTo: ["https://partner.example"],
+    }).generate([reviewedTool()], cwd);
+    const tool = files.find((file) => file.path.includes("get-order-status"));
+    expect(tool?.contents).toContain('{ signal, exposedTo: ["https://partner.example"] }');
+  });
+
   it("registration skips quietly when the browser has no WebMCP", async () => {
     const files = await tools({ outDir: "src/webmcp" }).generate([reviewedTool()], cwd);
     const tool = files.find((file) => file.path.includes("get-order-status"));
