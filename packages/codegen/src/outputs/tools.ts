@@ -32,6 +32,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { GeneratedFile, Output, ReviewedTool } from "../types.js";
+import { assetText } from "./assets.js";
 import {
   barrelSource,
   generatedRegion,
@@ -166,6 +167,22 @@ export function tools(options: ToolsOutputOptions): Output {
       const barrel = await plainFile(join(outDir, "index.ts"), barrelSource(tools));
       barrel.notes = [...orphanNotes, ...(barrel.notes ?? [])];
       files.unshift(await plainFile(join(outDir, "runtime.webmcp.ts"), runtimeSource()), barrel);
+
+      // The skill file: the rules harness for the user's own coding agents,
+      // at the cross-client skills location. Regenerated wholesale like the
+      // runtime — its header comment says why (project rules belong in the
+      // user's own skill directory, which stacks on top).
+      const skillFile = await plainFile(
+        resolve(cwd, ".agents/skills/webmcp-tools/SKILL.md"),
+        await assetText("skill/SKILL.md"),
+      );
+      if (skillFile.action !== "unchanged") {
+        skillFile.notes = [
+          "The WebMCP skill for coding agents lives at .agents/skills/webmcp-tools/SKILL.md.",
+          ...(skillFile.notes ?? []),
+        ];
+      }
+      files.push(skillFile);
       return files;
     },
   };
