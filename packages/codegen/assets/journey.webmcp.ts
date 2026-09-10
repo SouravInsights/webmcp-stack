@@ -31,7 +31,7 @@ import {
   toolError,
   toolResult,
   type WebMcpToolResult,
-} from "../runtime.webmcp";
+} from "./runtime.webmcp";
 
 type Json = Record<string, unknown>;
 

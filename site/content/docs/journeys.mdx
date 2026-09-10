@@ -77,8 +77,10 @@ Codegen ships the machinery, never the journeys:
   every `generate`, next to `runtime.webmcp.ts`. It's generator-owned: don't
   hand-edit it; regeneration overwrites it. The draft, the step registration,
   the gate, the confirmation — all of it lives here, once, for every journey.
-- **Registration** — the generated `index.ts` auto-imports everything in your
-  `journeys/` folder and registers it. Drop in a new journey file, it's live.
+- **Registration** — the generated `index.ts` auto-imports everything in the
+  `journeys/` folder inside your tools directory (e.g.
+  `src/webmcp/journeys/`) and registers it. Drop in a journey file, re-run
+  `generate`, it's live.
 - **Checks** — `verify` validates journey files: submit gate present, steps
   described within budget, step count small enough for an agent to track, and no
   direct `fetch` bypassing your generated tools.
@@ -89,8 +91,8 @@ knows the flow. So you write one small file per journey (or your coding agent
 does, guided by the bundled skill file):
 
 ```ts
-// journeys/document-trip.webmcp.ts
-import { createJourney } from "../webmcp/journey.webmcp";
+// src/webmcp/journeys/document-trip.webmcp.ts
+import { createJourney } from "../journey.webmcp";
 import { getAutocompleteTool, fetchGetAutocomplete } from "../get-autocomplete.webmcp";
 import { executeCreateTrip, type CreateTripInput } from "../create-trip.webmcp";
 

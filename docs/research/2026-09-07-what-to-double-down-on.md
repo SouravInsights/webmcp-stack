@@ -138,8 +138,9 @@ Reading that code, the three pieces are:
    not agent-shaped results.
 2. **Register journeys on page load.** The generated `index.ts` — the file
    that today exports `registerAllTools()` — also imports every export of
-   `journeys/*.webmcp.ts` and calls its `.register()`. Dropping a new
-   journey file into that folder makes it live with zero wiring.
+   `<outDir>/journeys/*.webmcp.ts` and calls its `.register()`. Dropping
+   a new journey file into that folder and re-running generate is the
+   whole wiring story.
 3. **Check journey files in `verify`.** Submit gate present, every step
    described within budget, step count ≤5, no PII-shaped draft field leaking
    into a step's output.
@@ -149,7 +150,7 @@ Plus one report line at generate time when endpoints cluster like a flow
 declare a journey?"). A hint, never an auto-generation.
 
 **What we never write: the journey definitions themselves.** Every
-`journeys/*.webmcp.ts` file is the user's agent's code, written with the
+`<outDir>/journeys/*.webmcp.ts` file is the user's agent's code, written with the
 skill file's guidance — only the product side knows the flow. What codegen
 can't do: read an OpenAPI spec and discover that "create a trip" is really
 search → set details → create → open the editor. That knowledge lives in
@@ -160,7 +161,7 @@ Two real examples of those user-side files, from beenthere's generated
 surface:
 
 ```ts
-// journeys/document-trip.webmcp.ts
+// src/webmcp/journeys/document-trip.webmcp.ts
 export const documentTrip = createJourney({
   name: "document-trip",
   goal: "Record a trip you've been on and open the editor to write its story",
@@ -198,7 +199,7 @@ every mechanical check — verb-first, short, maps to a real endpoint — and
 still be wrong. That class of mistake is the skill file's job; see below.
 
 ```ts
-// journeys/collect-stamp.webmcp.ts
+// src/webmcp/journeys/collect-stamp.webmcp.ts
 export const collectStamp = createJourney({
   name: "collect-stamp",
   goal: "Generate a stamp for a city the user has a qualifying trip for",

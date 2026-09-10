@@ -292,6 +292,152 @@ export function verifyTools(tools: ReviewedTool[]): VerifyCheck[] {
   return checks;
 }
 
+/**
+ * The top-level keys of an inline object literal's `steps: { ... }` block,
+ * found by brace matching rather than parsing (journey files are the user's
+ * TypeScript; a full parse is out of scope for a lint). Used to count steps.
+ */
+function journeyStepNames(contents: string): string[] {
+  const start = /steps\s*:\s*\{/.exec(contents);
+  if (!start) return [];
+  let depth = 0;
+  let bodyStart = -1;
+  let bodyEnd = -1;
+  for (let i = start.index + start[0].length - 1; i < contents.length; i++) {
+    const char = contents[i];
+    if (char === "{") {
+      if (depth === 0) bodyStart = i + 1;
+      depth++;
+    } else if (char === "}") {
+      depth--;
+      if (depth === 0) {
+        bodyEnd = i;
+        break;
+      }
+    }
+  }
+  if (bodyStart === -1 || bodyEnd === -1) return [];
+  const body = contents.slice(bodyStart, bodyEnd);
+  // Keys at depth one: "search-places": { ... }. The sticky regex anchors at
+  // the first non-space character after the walk position, and the walk
+  // skips past each match, so a key is counted exactly once.
+  const names: string[] = [];
+  const keyPattern = /"([^"]+)"\s*:\s*\{/y;
+  let innerDepth = 0;
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i];
+    if (char === "{") {
+      innerDepth++;
+      continue;
+    }
+    if (char === "}") {
+      innerDepth--;
+      continue;
+    }
+    if (innerDepth !== 0) continue;
+    let cursor = i;
+    while (cursor < body.length && /\s/.test(body[cursor] ?? "")) cursor++;
+    keyPattern.lastIndex = cursor;
+    const keyMatch = keyPattern.exec(body);
+    if (keyMatch) {
+      names.push(keyMatch[1] ?? "");
+      // The match consumed the step's opening brace — count it, since the
+      // walk skips past the whole match including that brace.
+      innerDepth++;
+      i = cursor + keyMatch[0].length - 1;
+    }
+  }
+  return names;
+}
+
+/** A journey definition file from the tools directory's journeys/ folder. */
+export interface JourneyFileInput {
+  path: string;
+  contents: string;
+}
+
+/**
+ * The journey checks, over the user's journey files (not the generated
+ * tools). Structural problems (no createJourney, no submit gate, missing
+ * run) and over-budget descriptions are errors; step count and bypassing
+ * the generated callers are warnings. Journey files are the user's agent's
+ * code, so findings name the fix, not just the smell.
+ */
+export function verifyJourneyFiles(files: JourneyFileInput[]): VerifyCheck[] {
+  const structural: string[] = [];
+  const budget: string[] = [];
+  const warnings: string[] = [];
+
+  for (const { path, contents } of files) {
+    if (!/createJourney\s*\(/.test(contents)) {
+      structural.push(
+        `${path} — no createJourney() call; files in journeys/ must define a journey.`,
+      );
+      continue;
+    }
+    if (!/submit\s*:/.test(contents) || !/run\s*:/.test(contents)) {
+      structural.push(
+        `${path} — no submit gate with a run; a journey without one is just loose tools.`,
+      );
+    }
+    const steps = journeyStepNames(contents);
+    if (steps.length > 5) {
+      warnings.push(
+        `${path} — ${steps.length} steps; past five, agents lose the thread. Split it into two journeys.`,
+      );
+    }
+    for (const match of contents.matchAll(/description\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
+      const text = match[1] ?? "";
+      if (text.length > TOOL_DESCRIPTION_MAX) {
+        budget.push(
+          `${path} — a description runs ${text.length} characters (max ${TOOL_DESCRIPTION_MAX}); tighten it.`,
+        );
+      }
+    }
+    const withoutImports = contents.replace(/^\s*import\s.*$/gm, "");
+    if (/\b(?:fetch|callApi)\s*\(/.test(withoutImports)) {
+      warnings.push(
+        `${path} — calls fetch/callApi directly; use the generated raw callers (fetchX) or a tool's execute, so the contract lives in one place.`,
+      );
+    }
+  }
+
+  const checks: VerifyCheck[] = [];
+  if (structural.length > 0) {
+    checks.push({
+      area: "Journeys",
+      summary: `${structural.length} structural problem${structural.length === 1 ? "" : "s"}`,
+      findings: structural,
+      level: "error",
+    });
+  }
+  if (budget.length > 0) {
+    checks.push({
+      area: "Journeys",
+      summary: `${budget.length} over budget`,
+      findings: budget,
+      level: "error",
+    });
+  }
+  if (warnings.length > 0) {
+    checks.push({
+      area: "Journeys",
+      summary: `${warnings.length} warning${warnings.length === 1 ? "" : "s"}`,
+      findings: warnings,
+      level: "warning",
+    });
+  }
+  if (checks.length === 0 && files.length > 0) {
+    checks.push({
+      area: "Journeys",
+      summary: `${files.length} journey file${files.length === 1 ? "" : "s"}, gates and budgets in order`,
+      findings: [],
+      level: "ok",
+    });
+  }
+  return checks;
+}
+
 /** The --url probe: is the page actually live for a visitor's browser? */
 export async function verifyUrl(url: string): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];

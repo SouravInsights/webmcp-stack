@@ -19,7 +19,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -49,7 +49,7 @@ import { runGenerate } from "./pipeline.js";
 import { resolveSetup } from "./setup.js";
 import { schemaExportsToJson } from "./sources/schema.js";
 import type { CodegenConfig } from "./types.js";
-import { verifyTools, verifyUrl } from "./verify.js";
+import { type JourneyFileInput, verifyJourneyFiles, verifyTools, verifyUrl } from "./verify.js";
 import { applyWiring, planWiring, type WirePlan } from "./wire.js";
 
 const HELP = `
@@ -503,6 +503,28 @@ async function verify(flags: CliFlags): Promise<number> {
 
   const registered = result.tools.filter((tool) => !tool.withheld);
   const checks = verifyTools(result.tools);
+
+  // Journey files are the user's code, so verify can't get them from the
+  // pipeline's tool list — it reads the journeys/ folder of each tools
+  // output itself and lints what it finds there.
+  const journeyInputs: JourneyFileInput[] = [];
+  for (const output of setup.config.outputs) {
+    if (output.kind !== "tools") continue;
+    const journeysDir = resolve(cwd, (output as { outDir?: string }).outDir ?? "", "journeys");
+    let entries: string[] = [];
+    try {
+      entries = (await readdir(journeysDir)).filter((entry) => entry.endsWith(".webmcp.ts"));
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      journeyInputs.push({
+        path: join("journeys", entry),
+        contents: await readFile(join(journeysDir, entry), "utf8"),
+      });
+    }
+  }
+  checks.push(...verifyJourneyFiles(journeyInputs));
 
   info("");
   info(`  ${setup.label}: ${result.tools.length} tools, ${registered.length} registered`);

@@ -58,6 +58,45 @@ describe("js generator", () => {
     await rm(cwd, { recursive: true, force: true });
   });
 
+  it("emits a live raw caller (fetchX) that the default execute composes", async () => {
+    const files = await tools({ outDir: "src/webmcp" }).generate([reviewedTool()], cwd);
+    const tool = files.find((file) => file.path.includes("get-order-status"));
+    expect(tool?.contents).toContain("export async function fetchGetOrderStatus(");
+    expect(tool?.contents).toContain("const data = await fetchGetOrderStatus(input, signal);");
+  });
+
+  it("scaffolds the journey factory and never reports it as an orphan", async () => {
+    // Simulate a previous run's factory sitting on disk.
+    await mkdir(join(cwd, "src/webmcp"), { recursive: true });
+    await writeFile(join(cwd, "src/webmcp/journey.webmcp.ts"), "// previously scaffolded\n");
+
+    const files = await tools({ outDir: "src/webmcp" }).generate([reviewedTool()], cwd);
+    const helper = files.find((file) => file.path.endsWith("webmcp/journey.webmcp.ts"));
+    expect(helper).toBeDefined();
+    expect(helper?.contents).toContain("export function createJourney(");
+
+    // Generator-owned, so the orphan report must leave it alone.
+    const barrel = files.find((file) => file.path.endsWith("webmcp/index.ts"));
+    expect((barrel?.notes ?? []).join("\n")).not.toContain("journey.webmcp.ts");
+  });
+
+  it("registers journey files found in the journeys folder", async () => {
+    await mkdir(join(cwd, "src/webmcp/journeys"), { recursive: true });
+    await writeFile(
+      join(cwd, "src/webmcp/journeys/document-trip.webmcp.ts"),
+      "// the user's journey definition\n",
+    );
+
+    const files = await tools({ outDir: "src/webmcp" }).generate([reviewedTool()], cwd);
+    const barrel = files.find((file) => file.path.endsWith("webmcp/index.ts"));
+    expect(barrel?.contents).toContain(
+      'import * as journeyModule0 from "./journeys/document-trip.webmcp";',
+    );
+    expect(barrel?.contents).toContain("await registerJourneys(journeyModules, signal);");
+    const runtime = files.find((file) => file.path.endsWith("webmcp/runtime.webmcp.ts"));
+    expect(runtime?.contents).toContain("export async function registerJourneys(");
+  });
+
   it("scaffolds the WebMCP skill file at the cross-client skills location", async () => {
     const files = await tools({ outDir: "src/webmcp" }).generate([reviewedTool()], cwd);
     const skill = files.find((file) => file.path.endsWith(".agents/skills/webmcp-tools/SKILL.md"));
@@ -167,8 +206,11 @@ describe("js generator", () => {
     // Commented like an editor's toggle-comment: fixed marker column, original
     // indentation preserved, so uncommenting restores working code.
     expect(tool?.contents).toContain("//       ...cancelOrderTool,");
-    // The import reflects it: getModelContext is part of the fence, not the file.
-    expect(tool?.contents).toContain('import { toolDisabled } from "./runtime.webmcp";');
+    // The import reflects it: getModelContext is part of the fence, not the
+    // file — but callApi stays live, because the raw caller (fetchX) the
+    // generated region emits is live too: journeys compose withheld tools.
+    expect(tool?.contents).toContain('import { callApi, toolDisabled } from "./runtime.webmcp";');
+    expect(tool?.contents).toContain("export async function fetchCancelOrder(");
     // The execute scaffold still refuses politely if someone registers it by hand.
     expect(tool?.contents).toContain('return toolDisabled("cancel-order.webmcp.ts");');
     // And the header says what "withheld" means.
@@ -290,12 +332,11 @@ describe("js generator", () => {
       cwd,
     );
     const tool = files.find((file) => file.path.includes("cancel-order"));
-    // Disabled notice first, the working call right below it, commented out.
+    // Disabled notice first, the working call right below it, commented out
+    // — and it composes the generated region's raw caller like every other
+    // endpoint-backed tool.
     expect(tool?.contents).toContain('return toolDisabled("cancel-order.webmcp.ts");');
-    expect(tool?.contents).toContain(
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting on generated source, which contains a template literal
-      "// const data = await callApi(`/orders/${input.orderId}/cancel`",
-    );
+    expect(tool?.contents).toContain("// const data = await fetchCancelOrder(input, signal);");
     // The consent gate is generated, not left as a comment for humans to remember.
     expect(tool?.contents).toContain("requestUserConfirmation(");
     expect(tool?.contents).toContain("The user declined this action.");
@@ -335,13 +376,14 @@ describe("js generator", () => {
       'import { getModelContext, callApi, toolResult, asToolError } from "./runtime.webmcp";',
     );
 
-    // The disabled tool's request is commented out, so its helpers stay out
-    // of the import line; the enable instructions name what to add back.
+    // The disabled tool's request is commented out, but its generated raw
+    // caller (fetchX) is live — so callApi is in the import line, and the
+    // enable instructions only name what's genuinely missing.
     const disabledWrite = files.find((file) => file.path.includes("cancel-order"));
     expect(disabledWrite?.contents).toContain(
-      'import { getModelContext, requestUserConfirmation, asToolError, toolDisabled } from "./runtime.webmcp";',
+      'import { getModelContext, requestUserConfirmation, callApi, asToolError, toolDisabled } from "./runtime.webmcp";',
     );
-    expect(disabledWrite?.contents).toContain("add callApi and toolResult to the import above");
+    expect(disabledWrite?.contents).toContain("add toolResult to the import above");
 
     // A standalone schema tool has no route to call: no callApi. It is a
     // write, so the confirmation gate's helper is imported and used.

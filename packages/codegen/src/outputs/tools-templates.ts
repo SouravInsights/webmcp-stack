@@ -61,11 +61,15 @@ export function generatedRegion(
   const withheld = tool.withheld && !enabled;
   const hasRoute = Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
   const runtimeImports = withheld
-    ? "toolDisabled"
+    ? hasRoute
+      ? "callApi, toolDisabled"
+      : "toolDisabled"
     : [
         "getModelContext",
         ...(mutates ? ["requestUserConfirmation"] : []),
-        ...(enabled && hasRoute ? ["callApi"] : []),
+        // Every endpoint-backed tool emits a live fetchX raw caller, so
+        // callApi is imported whether the tool itself starts enabled or not.
+        ...(hasRoute ? ["callApi"] : []),
         ...(enabled ? ["toolResult"] : []),
         "asToolError",
         ...(enabled ? [] : ["toolDisabled"]),
@@ -160,6 +164,17 @@ export function generatedRegion(
     `    consequentialHint: ${tool.riskTier === "destructive-confirm"},`,
     `  },`,
     `};`,
+    ...(hasRoute
+      ? [
+          ``,
+          `/** The bare request, without the agent-facing result wrapping. Journeys`,
+          ` * and your own code compose this; execute${pascal} is the agent-facing one. */`,
+          `export async function fetch${pascal}(input: ${tool.inputTypeName}, signal?: AbortSignal) {`,
+          `  ${requestCall(tool)}`,
+          `  return data;`,
+          `}`,
+        ]
+      : []),
     ``,
     ...(withheld
       ? [
@@ -211,7 +226,11 @@ export function generatedRegion(
  */
 export function ownedRegionScaffold(tool: ReviewedTool): string {
   const pascal = pascalCase(tool.name);
-  const call = requestCall(tool);
+  const hasRoute = Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
+  // Endpoint-backed tools compose the raw caller from the generated region
+  // (fetchX), so the default execute stays one line and journeys reuse the
+  // exact same request. Schema-only tools keep the honest TODO.
+  const call = hasRoute ? `const data = await fetch${pascal}(input, signal);` : requestCall(tool);
   // An endpoint-backed tool scaffolds a call to its route. A standalone schema
   // tool has no route: the honest scaffold says "wire this to your app's own
   // action" and names nothing we made up.
@@ -288,7 +307,10 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
         ? [
             `  // This tool is withheld: nothing registers it, so agents cannot see`,
             `  // or call it. To enable it, uncomment the request below and the`,
-            `  // registration above, and add callApi and toolResult to the import.`,
+            // Route-backed tools import callApi already (fetchX uses it).
+            hasRoute
+              ? `  // registration above, and add toolResult to the import.`
+              : `  // registration above, and add callApi and toolResult to the import.`,
           ]
         : [
             `  // This tool starts disabled: it ${
@@ -297,7 +319,9 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
                 : `wraps an ${tool.endpointRole} endpoint`
             }. Agents can see it, and calling it tells`,
             `  // them it is disabled. To enable it, delete the line below, uncomment`,
-            `  // the code, and add callApi and toolResult to the import above.`,
+            hasRoute
+              ? `  // the code, and add toolResult to the import above.`
+              : `  // the code, and add callApi and toolResult to the import above.`,
           ]),
       `  void signal; // passed to fetch once you enable the call below`,
       `  return toolDisabled("${tool.name}.webmcp.ts");`,
@@ -466,6 +490,30 @@ export function getModelContext(): ModelContext | null {
 }
 
 /**
+ * Register every journey exported from the modules the barrel found in
+ * journeys/. Anything with a .register() method counts (createJourney's
+ * return shape); anything else is skipped quietly. One journey failing never
+ * takes the others down with it.
+ */
+export async function registerJourneys(
+  modules: Record<string, unknown>[],
+  signal?: AbortSignal,
+): Promise<void> {
+  for (const module of modules) {
+    for (const value of Object.values(module)) {
+      const journey = value as { register?: unknown } | null;
+      if (journey !== null && typeof journey === "object" && typeof journey.register === "function") {
+        try {
+          await (journey.register as (signal?: AbortSignal) => Promise<void>)(signal);
+        } catch (error) {
+          console.warn("[webmcp-codegen] a journey failed to register:", error);
+        }
+      }
+    }
+  }
+}
+
+/**
  * Call your API from the page. Same origin by default (pass a full URL when
  * the API lives on another host), always with the signed-in user's session
  * cookies. Throws on HTTP errors; returns the parsed JSON body, or raw text
@@ -575,11 +623,19 @@ export function requestUserConfirmation(message: string): Promise<boolean> {
 }
 
 /** The barrel: one import that registers every generated tool. */
-export function barrelSource(tools: ReviewedTool[]): string {
+export function barrelSource(tools: ReviewedTool[], journeyFiles: string[] = []): string {
   const imports = tools
     .map((tool) => `import { register${pascalCase(tool.name)} } from "./${tool.name}.webmcp";`)
     .join("\n");
   const names = tools.map((tool) => `register${pascalCase(tool.name)}`).join(",\n  ");
+
+  const journeyImports = journeyFiles
+    .map(
+      (file, index) =>
+        `import * as journeyModule${index} from "./journeys/${file.replace(/\.ts$/, "")}";`,
+    )
+    .join("\n");
+  const journeyModuleNames = journeyFiles.map((_, index) => `journeyModule${index}`).join(", ");
 
   return `/**
  * Generated by webmcp-codegen. This file is fully regenerated on every run.
@@ -590,11 +646,11 @@ export function barrelSource(tools: ReviewedTool[]): string {
  */
 
 ${imports}
-
+${journeyFiles.length > 0 ? `\nimport { registerJourneys } from "./runtime.webmcp";\n${journeyImports}\n` : ""}
 const registrations = [
   ${names}
 ];
-
+${journeyFiles.length > 0 ? `\nconst journeyModules = [${journeyModuleNames}];\n` : ""}
 /**
  * Register every generated tool with WebMCP. One tool failing (for example
  * because the page's Permissions-Policy disables tools) never takes the
@@ -607,6 +663,13 @@ export async function registerAllTools(signal?: AbortSignal): Promise<void> {
     } catch (error) {
       console.warn("[webmcp-codegen] a tool failed to register:", error);
     }
+  }
+  ${
+    journeyFiles.length > 0
+      ? `// Journeys come last: their steps compose the tools above.
+  await registerJourneys(journeyModules, signal);`
+      : `// Drop journey definitions into ./journeys/ and re-run \`generate\`:
+  // the next barrel registers every createJourney() export it finds there.`
   }
 }
 `;

@@ -79,11 +79,26 @@ export function tools(options: ToolsOutputOptions): Output {
       try {
         for (const entry of await readdir(outDir)) {
           if (!entry.endsWith(".webmcp.ts") || entry === "runtime.webmcp.ts") continue;
+          // The journey factory is generator-owned (regenerated wholesale
+          // below), never an orphan candidate.
+          if (entry === "journey.webmcp.ts") continue;
           const path = join(outDir, entry);
           existing.set(path, await readFile(path, "utf8"));
         }
       } catch {
         // First run: the directory does not exist yet.
+      }
+
+      // Journey definitions the user (or their agent) wrote since the last
+      // run. The barrel imports and registers them; dropping a new file in
+      // here and re-running generate is the whole wiring story.
+      let journeyFiles: string[] = [];
+      try {
+        journeyFiles = (await readdir(join(outDir, "journeys")))
+          .filter((entry) => entry.endsWith(".webmcp.ts"))
+          .sort();
+      } catch {
+        // No journeys directory yet — most repos, most of the time.
       }
 
       // Endpoint ref → the file currently holding it.
@@ -164,9 +179,16 @@ export function tools(options: ToolsOutputOptions): Output {
       // The runtime and the barrel are regenerated wholesale every run;
       // their headers say "do not edit", and we mean it. Orphan reports ride
       // on the barrel so they surface even when nothing else changed.
-      const barrel = await plainFile(join(outDir, "index.ts"), barrelSource(tools));
+      const barrel = await plainFile(join(outDir, "index.ts"), barrelSource(tools, journeyFiles));
       barrel.notes = [...orphanNotes, ...(barrel.notes ?? [])];
       files.unshift(await plainFile(join(outDir, "runtime.webmcp.ts"), runtimeSource()), barrel);
+
+      // The journey factory: fully ours, regenerated wholesale like the
+      // runtime. Journey definitions (the user's code) import createJourney
+      // from it.
+      files.push(
+        await plainFile(join(outDir, "journey.webmcp.ts"), await assetText("journey.webmcp.ts")),
+      );
 
       // The skill file: the rules harness for the user's own coding agents,
       // at the cross-client skills location. Regenerated wholesale like the

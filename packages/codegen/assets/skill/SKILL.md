@@ -81,10 +81,14 @@ when the user's request is casual.
 
 Reach for a journey when a goal takes several calls with shared state, when
 an input can't be invented (a resolved place object), or when a spend should
-be gated (an eligibility check before a paid generation). Pattern:
+be gated (an eligibility check before a paid generation). Journey files live
+in the `journeys/` folder inside the generated tools directory
+(`src/webmcp/journeys/document-trip.webmcp.ts`); re-run `verify` after
+writing one. Pattern:
 
 ```ts
-import { createJourney } from "../webmcp/journey.webmcp";
+// src/webmcp/journeys/document-trip.webmcp.ts
+import { createJourney } from "../journey.webmcp";
 import { getAutocompleteTool, fetchGetAutocomplete } from "../get-autocomplete.webmcp";
 import { executeCreateTrip, type CreateTripInput } from "../create-trip.webmcp";
 
