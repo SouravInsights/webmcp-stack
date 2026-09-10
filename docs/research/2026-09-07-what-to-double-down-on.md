@@ -51,118 +51,63 @@ the user or their agent adjusts it through the overrides file; regeneration
 keeps their decisions. Without this, codegen is just a 1:1 mapper with
 extra steps — this is what makes it not that.
 
+**Grouping and journeys are not the same thing.** Grouping *merges*: several
+endpoints that are one action split by API shape become one tool —
+beenthere's `create-media-request-upload` + `complete-media-upload` are an
+upload handshake no agent should see; one `upload-media` tool wraps both
+calls. It happens at generate time, from the spec, no human input. Journeys
+*chain*: several different decisions with shared state and one guarded
+submit (`document-trip`). They're written after generation, by the user's
+agent, because the flow lives in the product. One-line test: same action
+split across calls → group it; different decisions along the way → journey.
+Grouping shrinks the standalone surface; journeys make dangerous writes
+reachable under a gate — and tools a journey covers get absorbed into it
+(flow-only tools never register standalone), so the total registered surface
+goes down, not up. `verify`'s surface budget counts journey tools too, so
+this is enforced, not aspirational.
+
 ## journeys — one file we ship, small files the user's agent writes
 
 **Our code is exactly one file: `journey.webmcp.ts`.** When `generate` runs,
 it writes this file into the user's repo next to `runtime.webmcp.ts`, under
 the same contract as the runtime file: fully ours, regenerated on every run,
-never hand-edited. ~90 lines, no dependencies beyond the runtime helpers
-that already ship. This is the entire journey machinery — complete, not
-abbreviated (the same file lives at
-`packages/codegen/assets/journey.webmcp.ts`):
+never hand-edited. ~120 lines, no dependencies beyond the runtime helpers
+that already ship. The complete, current copy lives at
+`packages/codegen/assets/journey.webmcp.ts` — that file is the review
+artifact; this section explains it.
+
+The contract it exposes — this is the part that matters:
 
 ```ts
-import {
-  getModelContext, toolResult, toolError, asToolError, requestUserConfirmation,
-  type WebMcpToolResult,
-} from "./runtime.webmcp";
-
-type Json = Record<string, unknown>;
-
-export interface JourneyStep {
-  description: string;   // what the agent reads: "Search real places and store the pick."
-  input: Json;           // the step's input fields, as a JSON Schema object
-  provides: string[];    // draft fields this step leaves behind; submit waits for them
-  run?: (input: Json, signal: AbortSignal | undefined, draft: Readonly<Json>) => Promise<Json>;
-  // ^ what the step does — usually calls an existing tool's execute.
-  //   Gets the draft so far. Returns the fields to store. Default: store the input.
+// A step backed by an existing generated tool: inherits its description and
+// input schema, calls the raw caller the generated file exports. You write
+// only what's new — which slice of the result lands in the draft.
+interface ToolStep {
+  tool: { description?: string; inputSchema?: Json };          // e.g. getAutocompleteTool
+  call: (input, signal, draft) => Promise<unknown>;            // e.g. fetchGetAutocomplete
+  store: (result: unknown) => Json;                            // what lands in the draft
+  provides: string[];                                          // draft fields submit waits for
+  description?: string;                                        // override; default: the tool's
+  input?: Json;                                                // override; default: the tool's
 }
 
-export interface JourneyDef {
+// A step with no backend call — it just collects input into the draft
+// ("set the title and dates"). With a run, it can do work first.
+interface FreeStep {
+  description: string;
+  input: Json;
+  provides: string[];
+  run?: (input, signal, draft) => Promise<Json>;               // default: store the input
+}
+
+interface JourneyDef {
   name: string;          // "document-trip" — step tools derive from it
   goal: string;          // the one sentence every step repeats to the agent
-  steps: Record<string, JourneyStep>;
+  steps: Record<string, JourneyStep>;                          // ToolStep | FreeStep
   submit: {
-    description: string;                         // what the human confirms
-    build: (draft: Readonly<Json>) => unknown;   // assemble the real tool's input
-    run: (input: never, signal?: AbortSignal) => Promise<unknown>;  // the real tool's execute
-  };
-}
-
-export function createJourney(def: JourneyDef) {
-  const modelContext = getModelContext();
-  let draft: Json = {};   // ← THE DRAFT. One plain object per page load.
-
-  function missing(): string[] {
-    return Object.entries(def.steps).flatMap(([key, step]) =>
-      step.provides
-        .filter((field) => draft[field] === undefined)
-        .map((field) => `${def.name}-${key} (stores "${field}")`),
-    );
-  }
-
-  async function registerSteps(signal?: AbortSignal): Promise<void> {
-    if (!modelContext) return;
-    for (const [key, step] of Object.entries(def.steps)) {
-      await modelContext.registerTool({
-        name: `${def.name}-${key}`,
-        description: `${step.description} Part of "${def.name}": ${def.goal}`,
-        inputSchema: step.input,
-        annotations: { readOnlyHint: true },
-        execute: async (input, context) => {
-          try {
-            const stored = step.run
-              ? await step.run(input as Json, context?.signal, { ...draft })
-              : (input as Json);
-            Object.assign(draft, stored);
-            const left = missing();
-            return toolResult(
-              left.length === 0
-                ? `Stored. The journey is ready — call ${def.name}-submit.`
-                : `Stored. Still needed: ${left.join(", ")}.`,
-            );
-          } catch (error) {
-            return asToolError(error);
-          }
-        },
-      }, { signal });
-    }
-  }
-
-  async function registerSubmit(signal?: AbortSignal): Promise<void> {
-    if (!modelContext) return;
-    await modelContext.registerTool({
-      name: `${def.name}-submit`,
-      description: def.submit.description,
-      inputSchema: { type: "object", properties: {} },
-      annotations: { readOnlyHint: false },
-      execute: async (_input, context) => {
-        context?.signal?.throwIfAborted();
-        const left = missing();
-        if (left.length > 0) {
-          return toolError(`Not ready to submit. Call these first: ${left.join(", ")}.`);
-        }
-        const confirmed = await requestUserConfirmation(
-          `Allow the agent to: ${def.submit.description}`,
-        );
-        if (!confirmed) return toolError("The user declined this action.");
-        try {
-          const result = await def.submit.run(def.submit.build(draft) as never, context?.signal);
-          draft = {};   // a submitted journey starts clean
-          return result as WebMcpToolResult;
-        } catch (error) {
-          return asToolError(error);
-        }
-      },
-    }, { signal });
-  }
-
-  return {
-    async register(signal?: AbortSignal): Promise<void> {
-      await registerSteps(signal);
-      await registerSubmit(signal);
-    },
-    inspectDraft: (): Json => ({ ...draft }),   // for the dashboard and tests
+    description: string;                          // what the human confirms
+    build: (draft) => unknown;                    // assemble the real tool's input
+    run: (input: never, signal?) => Promise<unknown>;  // the real tool's execute
   };
 }
 ```
@@ -185,7 +130,10 @@ Reading that code, the three pieces are:
 **What the CLI does around that one file — three mechanical jobs:**
 
 1. **Copy it in.** The same code path that already scaffolds
-   `runtime.webmcp.ts` on every `generate`.
+   `runtime.webmcp.ts` on every `generate`. One template change rides along:
+   generated tool files also export the raw caller (`fetchGetAutocomplete` —
+   just the `callApi` line, unwrapped), because journeys compose raw data,
+   not agent-shaped results.
 2. **Register journeys on page load.** The generated `index.ts` — the file
    that today exports `registerAllTools()` — also imports every export of
    `journeys/*.webmcp.ts` and calls its `.register()`. Dropping a new
@@ -216,13 +164,10 @@ export const documentTrip = createJourney({
   goal: "Record a trip you've been on and open the editor to write its story",
   steps: {
     "search-places": {
-      description: "Search real places and store the pick.",
-      input: { type: "object", properties: { input: { type: "string" } }, required: ["input"] },
+      tool: getAutocompleteTool,                        // schema + description inherited
+      call: (input, signal) => fetchGetAutocomplete({ input: String(input.input) }, signal),
+      store: (places) => ({ locationObject: pickFrom(places) }),  // the resolved pick
       provides: ["locationObject"],
-      run: async (input, signal) => {
-        const res = await executeGetAutocomplete({ input: String(input.input) }, signal);
-        return { locationObject: pickFrom(res) };  // the user's pick
-      },
     },
     "set-details": {
       description: "Set the trip's title and dates.",
@@ -233,7 +178,7 @@ export const documentTrip = createJourney({
   submit: {
     description: "Create the trip and open it in the editor.",
     build: (draft) => draft as CreateTripInput,
-    run: executeCreateTrip,                         // POST /v1/trips/
+    run: executeCreateTrip,                             // POST /v1/trips/
   },
 });
 ```
@@ -262,18 +207,17 @@ export const collectStamp = createJourney({
       provides: ["tripId"],
     },
     "check-eligibility": {
-      description: "Check what stamp this trip qualifies for.",
-      input: { type: "object", properties: {} },
+      tool: getTripStampEligibilityTool,
+      input: { type: "object", properties: {} },        // the agent provides nothing
+      call: (_input, signal, draft) => fetchGetTripStampEligibility({ tripId: String(draft.tripId) }, signal),
+      store: (eligibility) => ({ eligibility }),
       provides: ["eligibility"],
-      run: async (_input, signal, draft) => ({
-        eligibility: await executeGetTripStampEligibility({ tripId: String(draft.tripId) }, signal),
-      }),
     },
   },
   submit: {
     description: "Generate the stamp (a paid generation call).",
     build: (draft) => ({ name: cityFrom(draft.eligibility) }),
-    run: executeGenerateStamp,                       // POST /v1/stamps/generate
+    run: executeGenerateStamp,                           // POST /v1/stamps/generate
   },
 });
 ```
@@ -282,7 +226,7 @@ Why this one exists: `generate-stamp` is a paid generation call, and a stamp
 only makes sense for a trip that qualifies. Without the journey shape, an
 agent generates stamps for cities the user never visited; with it, the
 eligibility check gates the spend, and the submit reuses the trip from the
-draft. (A step's `run` receives the draft so far — that's how
+draft. (A step's `call` receives the draft so far — that's how
 `check-eligibility` reads the `tripId` that `pick-trip` stored.)
 
 No JSON config DSL — the declaration references the user's schemas and
