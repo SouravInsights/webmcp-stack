@@ -29,8 +29,10 @@ some. The generator applies them to every tool, every run:
 - Read tools get marked read-only automatically (shipped). Outputs
   containing free-text fields get marked as untrusted user content,
   including fields nested inside arrays, objects, and nullable unions
-  (shipped in 0.7). Origin scoping (`exposedTo`) ships as a config option
-  once `registerTool` supports it; until then the report flags it.
+  (shipped in 0.7). Destructive tools get marked consequential
+  (`consequentialHint`, spec annotation — to ship). Origin scoping
+  (`exposedTo`) ships as a config option — the spec API exists now
+  (to ship; see docs/research/2026-09-10-spec-sync.md).
 - Write and destructive tools ask the user to confirm each call, in the
   generator-owned part of the file (shipped).
 
@@ -321,16 +323,20 @@ and `--url` check.
 
 What's left, in order:
 
-1. Close the budget gaps: the 500/150 description limits in generation and
+1. Spec sync quick wins (details: docs/research/2026-09-10-spec-sync.md):
+   emit `title`, auto-set `consequentialHint` on destructive tools, add the
+   `exposedTo` config pass-through, fix the Chrome 149 version claims in
+   three docs files. Template edits only.
+2. Close the budget gaps: the 500/150 description limits in generation and
    `verify`, and the 1.5K output-truncation helper in the generated region.
-2. The skill file (`assets/skill/SKILL.md` — written, needs the scaffold
+3. The skill file (`assets/skill/SKILL.md` — written, needs the scaffold
    wiring) plus its eval harness.
-3. Journeys — ship the `createJourney` helper (`assets/journey.webmcp.ts` —
+4. Journeys — ship the `createJourney` helper (`assets/journey.webmcp.ts` —
    written, needs the scaffold wiring) and the verify checks for journey
    files.
-4. The grouping step — intent-level tools by default, proposal in the
+5. The grouping step — intent-level tools by default, proposal in the
    report.
-5. Delete the LLM layer (`--llm`, `--suggest`, shipped in 0.8) once the
+6. Delete the LLM layer (`--llm`, `--suggest`, shipped in 0.8) once the
    skill file has shipped and nobody has complained.
 
 Parked (out of scope for now): the audit-package extraction, the
