@@ -21,8 +21,8 @@
  *     audit is only meaningful if a CI run is reproducible.
  *
  * This module covers layers 1-3 of the assembly order (source text, merge,
- * synthesis). Layer 4 (LLM drafts) is advisory and lives in llm.ts; layer 5
- * (overrides) lives in the pipeline's override step, applied last so it wins.
+ * synthesis). Overrides live in the pipeline's override step, applied last
+ * so they always win.
  */
 
 import pluralize from "pluralize";

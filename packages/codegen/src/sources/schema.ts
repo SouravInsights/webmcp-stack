@@ -230,37 +230,3 @@ function toJsonSchema(
     );
   }
 }
-
-/**
- * `generate --suggest` support: filter a module's exports to Standard Schemas
- * and convert each to JSON Schema text for the proposal prompt. Lives next to
- * the source so the conversion rules exist exactly once. Exports that are not
- * schemas are skipped silently (a module may export anything); exports that
- * look like schemas but fail conversion are reported, never silent.
- */
-export function schemaExportsToJson(
-  moduleExports: Record<string, unknown>,
-  anchorDir: string,
-): {
-  schemas: { name: string; schemaText: string }[];
-  skipped: { name: string; reason: string }[];
-} {
-  const schemas: { name: string; schemaText: string }[] = [];
-  const skipped: { name: string; reason: string }[] = [];
-  for (const [name, value] of Object.entries(moduleExports)) {
-    // Standard Schema (zod/valibot/arktype) carries a `~standard` marker;
-    // TypeBox is a bare JSON-Schema object. Both are valid — this loader was
-    // the one place that only accepted the marker, which is why TypeBox
-    // modules silently yielded nothing.
-    if (!isStandardSchema(value) && !isTypeBoxSchema(value)) continue;
-    try {
-      schemas.push({
-        name,
-        schemaText: JSON.stringify(toJsonSchema(value, name, "schema", anchorDir)),
-      });
-    } catch (error) {
-      skipped.push({ name, reason: error instanceof Error ? error.message : String(error) });
-    }
-  }
-  return { schemas, skipped };
-}

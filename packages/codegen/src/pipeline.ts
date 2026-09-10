@@ -12,7 +12,6 @@ import { dirname, resolve } from "node:path";
 import { describeCandidateInputs, describeCandidateTool } from "./describe.js";
 import { groupHandshakes } from "./group.js";
 import { pascalCase } from "./json-schema.js";
-import { runLlmLayer } from "./llm.js";
 import { mergeSchemaWithOperations } from "./merge.js";
 import { resolveNames } from "./naming.js";
 import { auditTools, reviewTools } from "./safety.js";
@@ -20,7 +19,6 @@ import type {
   AuditFinding,
   CodegenConfig,
   GeneratedFile,
-  LlmSuggestion,
   ReviewedTool,
   SkippedEndpoint,
   ToolOverrides,
@@ -60,11 +58,6 @@ export interface GenerateResult {
   files: GeneratedFile[];
   /** Human-facing pipeline notes, e.g. "stripped the shared v1 prefix". */
   notes: string[];
-  /**
-   * Advisory proposals from the LLM layer (`◦` lines in the report). Empty
-   * unless the layer is explicitly configured; never applied to files.
-   */
-  suggestions: LlmSuggestion[];
   /** Names that changed since the last run (old → new), overrides re-keyed. */
   crossRenames: { from: string; to: string }[];
   /** The names this run produced (name → route ref), for the caller to save. */
@@ -264,7 +257,6 @@ export async function runGenerate(
       findings,
       files: [],
       notes,
-      suggestions: [],
       crossRenames,
       namesLedger,
       migratedOverrides,
@@ -272,12 +264,6 @@ export async function runGenerate(
       wrote: false,
     };
   }
-
-  // 7b. The advisory LLM layer runs after the audit so its relationship
-  //     proposals can react to findings, and before outputs so a slow endpoint
-  //     never sits between the developer and their files. It only proposes:
-  //     report lines, never writes, never exit codes.
-  const suggestions = await runLlmLayer(config, { tools, findings });
 
   // 8. Run the outputs, then write the files (unless this is a dry run).
   //    Tools with a form pointer belong to the form output; without one
@@ -325,7 +311,6 @@ export async function runGenerate(
     findings,
     files,
     notes,
-    suggestions,
     crossRenames,
     namesLedger,
     migratedOverrides,

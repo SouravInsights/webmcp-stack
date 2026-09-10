@@ -119,7 +119,6 @@ export async function executeDeletePet(input: DeletePetInput) {
 | `generate --dry-run` | Preview everything, write nothing |
 | `generate --watch` | Re-generate when source files change |
 | `generate --force` | Write files even when the audit reports errors |
-| `generate --suggest PATH` | Ask the LLM layer which schemas in PATH are worth declaring (proposals only) |
 | `generate --spec PATH` / `--out DIR` | Overrides without a config file |
 | `webmcp-codegen dev` | Open the tools dashboard (`--port N` to change the port) |
 | `webmcp-codegen init` | Write `codegen.config.mjs` for full control (needs the package installed) |

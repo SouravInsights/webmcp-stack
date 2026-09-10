@@ -23,44 +23,6 @@ export interface WebApp {
   framework: "next" | "vite-react" | "nuxt" | "sveltekit" | "unknown";
 }
 
-/**
- * Schema-module discovery for --suggest, mirroring findSpecs. Nobody should
- * have to pass a file path to get proposals: we scan for modules that look
- * like schema definitions, in the places they conventionally live. Returns
- * module paths relative to cwd, likeliest first.
- */
-const SCHEMA_MODULE_NAMES = /schemas?|models?|types|validation/i;
-const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".next", "build", "out", "coverage"]);
-
-export async function findSchemaModules(cwd: string): Promise<string[]> {
-  const found: string[] = [];
-  // Conventional homes first, so a monorepo's shared package wins over a
-  // deeply nested app file.
-  for (const base of ["packages", "src", "apps", "lib", "."]) {
-    await scanDir(join(cwd, base), base === "." ? "" : base, 0);
-  }
-  return [...new Set(found)];
-
-  async function scanDir(abs: string, rel: string, depth: number): Promise<void> {
-    if (depth > 4) return;
-    let entries: import("node:fs").Dirent[];
-    try {
-      entries = await readdir(abs, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
-      const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        await scanDir(join(abs, entry.name), entryRel, depth + 1);
-      } else if (/\.(ts|mts|js|mjs)$/.test(entry.name) && SCHEMA_MODULE_NAMES.test(entry.name)) {
-        found.push(entryRel);
-      }
-    }
-  }
-}
-
 /** The validation libraries the schema source can read. */
 const SCHEMA_LIBS = ["zod", "valibot", "arktype", "typebox"] as const;
 

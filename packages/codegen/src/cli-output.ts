@@ -239,18 +239,6 @@ export function renderSummary(
   }
   console.log("");
 
-  // LLM proposals: visually distinct from findings (◦, cyan), because a
-  // suggestion is not a fact. Nothing here was applied to anything.
-  if (result.suggestions.length > 0) {
-    console.log(
-      `  ${c.cyan("◦")} ${bold(`${result.suggestions.length} LLM suggestion${result.suggestions.length === 1 ? "" : "s"}`)} ${dim("(proposals only; nothing applied)")}`,
-    );
-    for (const suggestion of result.suggestions) {
-      console.log(dim(`    ◦ ${suggestion.message}`));
-    }
-    console.log("");
-  }
-
   // Next step
   console.log(`  ${bold("Next:")} ${c.cyan("npx @webmcp-stack/codegen dev")}`);
   console.log(dim("  Review your tools, edit descriptions, test them live"));
@@ -347,15 +335,6 @@ export function renderVerbose(result: GenerateResult, setup: Setup, _cwd: string
       }
       console.log("");
     }
-  }
-
-  // LLM proposals, visually distinct from findings.
-  if (result.suggestions.length > 0) {
-    console.log(bold("LLM suggestions (proposals only; nothing applied):"));
-    for (const suggestion of result.suggestions) {
-      console.log(`  ${c.cyan("◦")} ${dim(suggestion.message)}`);
-    }
-    console.log("");
   }
 
   const notes = result.files.flatMap((file) => file.notes ?? []);
