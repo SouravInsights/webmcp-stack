@@ -24,7 +24,12 @@ export async function GET() {
 
   for (const slug of meta.pages) {
     const raw = await readFile(join(dir, `${slug}.mdx`), "utf8");
-    const body = raw.replace(/^---[\s\S]*?---\s*/, "").trim();
+    const body = raw
+      .replace(/^---[\s\S]*?---\s*/, "")
+      // Fumadocs code annotations are presentation only; a reader of the raw
+      // markdown should not see "// [!code highlight]".
+      .replace(/ ?\/\/ ?\[!code[^\]]*\]/g, "")
+      .trim();
     parts.push(body, "", "---", "");
   }
 
