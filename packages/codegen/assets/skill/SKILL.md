@@ -72,8 +72,8 @@ when the user's request is casual.
 - Each `*.webmcp.ts` has a generated region between the
   `webmcp-codegen` markers — never edit inside it; regeneration rewrites it.
   Your work goes below the marker (the `execute` body) or in
-  `.webmcp-codegen.json` (description/name/enabled overrides, which survive
-  regeneration and always win over generated text).
+  `.webmcp-codegen.json` (description, enabled, and field-text overrides, which
+  survive regeneration and always win over generated text).
 - After editing tools, run `npx @webmcp-stack/codegen verify` and fix what it
   reports.
 
@@ -124,5 +124,7 @@ export const documentTrip = createJourney({
   (`fetchX`); the submit's `run` is the real write tool's `execute`, so its
   confirmation and validation still apply. Never write a direct `fetch` in a
   journey file — `verify` flags it.
-- The submit gate is the only write in a journey; step tools are reads or
-  draft-writes and stay read-only.
+- Keep real writes in the submit gate. A tool-backed step inherits the composed
+  tool's read-only hint, and a free step that only stores input is read-only
+  too. Never route a mutating call through a step: it would be advertised as
+  safe and skip the confirmation the submit performs.

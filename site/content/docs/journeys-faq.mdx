@@ -163,13 +163,17 @@ about the product; our CLI can't.
 
 ## Won't journeys make my tool list even bigger?
 
-They shouldn't — followed properly, they shrink it. The rule: a tool that only
-makes sense inside a flow doesn't get registered on its own; its journey step
-is its only face. Writes reachable through a journey submit stay withheld as
-standalone tools forever. So endpoints collapse into flows instead of
-double-registering. And `verify`'s surface-size check counts *registered*
-tools, journey tools included — if the list grows past what's good for agents,
-CI fails. That's enforced, not aspirational.
+They can, if you let them. `verify` now counts journey tools in the surface
+total (one per step plus the submit gate) and warns when the whole surface grows
+past what's good for agents. It's a warning, not a failed build: the browser has
+no limit on how many tools you register, only agent quality does.
+
+Keeping the surface small is a convention you follow, not something the
+generator does for you. A read tool that a journey uses still registers on its
+own, so if it only makes sense inside the flow, withhold it in
+`.webmcp-codegen.json` or exclude it with `safety.exclude`. Writes reachable
+through a journey submit stay withheld as standalone tools unless you enable
+them, so leave them withheld and the submit is their only door.
 
 ## What if two steps use the same draft field name?
 

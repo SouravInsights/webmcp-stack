@@ -142,10 +142,13 @@ export const documentTrip = createJourney({
   stays withheld as a standalone tool forever; the journey's submit gate becomes
   its only public door. Journeys should shrink the surface an agent sees, not
   grow it.
-- **The safety doesn't depend on the journey file.** The gate, the confirmation,
-  and the draft clearing are enforced by the shared helper, not by anything you
-  write in the definition. A journey file can be written sloppily; it can't
-  skip the human's yes.
+- **The submit gate can't be edited away, but a step is still your code.** The
+  gate, the confirmation, and the draft clearing live in the shared helper, so a
+  journey file can't remove them. A step's `call` and `run`, though, are code you
+  or your agent write. Keep steps to reads and draft writes; put anything that
+  changes real data in the submit, where the human is asked first. `verify`
+  only marks a step read-only when the tool it composes is a read, but it can't
+  inspect arbitrary code, so the discipline is still yours.
 - **The draft is per page load, per journey.** Within one continuous page view
   it's fully reliable. Across a reload, it's gone — deliberately. Two parallel
   attempts at the same journey on one page would share one draft; in practice
