@@ -2,15 +2,18 @@
   "title": "webmcp-stack",
   "pages": [
     "index",
+    "why-agent-tools",
     "quickstart",
-    "cli",
-    "configuration",
+    "after-you-generate",
+    "working-with-your-agent",
+    "journeys",
+    "journeys-faq",
     "safety",
     "regeneration",
     "visible-effects",
-    "journeys",
-    "journeys-faq",
     "guides",
+    "configuration",
+    "cli",
     "devtools",
     "troubleshooting"
   ]

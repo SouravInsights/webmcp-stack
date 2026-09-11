@@ -1,0 +1,146 @@
+---
+title: After you generate
+description: The tools exist. Now decide what agents may actually do, check it, ship journeys for the real goals, and keep it honest as your API changes.
+---
+
+Generating is the easy part. This page is the rest: the loop you actually run,
+in the order that works.
+
+<Callout type="info">
+  If you have not generated anything yet, start with the
+  [Quickstart](/docs/quickstart). This page assumes you have a `src/webmcp`
+  folder and a passing `generate`.
+</Callout>
+
+## 1. Look at what you got
+
+Before you change anything, read the report and the scorecard.
+
+```bash
+npx @webmcp-stack/codegen dev      # browse and inspect every tool
+npx @webmcp-stack/codegen verify   # the quality scorecard, exits 1 on errors
+```
+
+The dashboard is for understanding, not decorating: every tool with its route,
+risk label, and findings. `verify` tells you where the surface is weak. Fix
+errors first; they block generation. Warnings can wait until the tool matters.
+
+## 2. Decide what agents may actually do
+
+Reads are registered so you can see the surface. Writes and destructive tools
+are generated but **not registered**. Enabling one is a deliberate edit, in the
+dashboard or in `.webmcp-codegen.json`:
+
+```json title=".webmcp-codegen.json"
+{
+  "overrides": {
+    "delete-trip": { "enabled": true }
+  }
+}
+```
+
+Turn on only what you would let a careful assistant do, and turn them on one at
+a time. A surface with four reviewed writes is worth more than one with forty
+unreviewed ones. If an endpoint exists but an agent should never touch it, leave
+it withheld or exclude it with `safety.exclude`.
+
+## 3. Fix the descriptions that matter
+
+This is the highest-leverage edit in the whole loop. A tool's name and
+description are literally part of the prompt the model reasons over, and the
+default from your spec is often a terse summary written for humans.
+
+Open the tools that matter and rewrite the description as three things: what it
+does, when to use it, and what it returns.
+
+```text
+Before: Get trips
+After:  List the trips the signed-in user has saved, newest first. Returns an
+        array of trips with title, dates, and place.
+```
+
+Descriptions live in the generated region, so edit them in
+`.webmcp-codegen.json` (the dashboard writes here too), never in the file above
+the marker. Your overrides survive every regeneration.
+
+## 4. Test it the way a person would
+
+Open your app in Chrome, turn on `chrome://flags/#enable-webmcp-testing`, and
+use the DevTools panel under **Application > WebMCP**. Call a read tool and
+check the data. Call a write tool and go all the way through the confirmation
+dialog, because that is the path a real user takes.
+
+The dashboard can run tools too, but it runs them server-side, without your
+browser session. Use it to check that the request is built correctly; use
+DevTools to check it works while signed in. See [Chrome DevTools WebMCP
+panel](/docs/devtools).
+
+## 5. Write journeys for the goals that take several calls
+
+Some things a user asks for cannot be one tool call. "Log the trip I took to
+Lisbon" is search, then details, then a confirmed create. That shape is a
+[journey](/docs/journeys): a shared draft, one tool per step, and a submit gate
+that refuses until every step is done and asks the human before the real write.
+
+Journeys are the part the generator cannot derive from your API, because the
+flow lives in your product. Your coding agent writes them, guided by the skill
+file. [Working with your coding agent](/docs/working-with-your-agent) shows how
+to ask.
+
+## 6. Make the effects visible
+
+When a tool changes something, the page should move. An agent acting while a
+person watches, with no visible change, is a bug in the experience even when the
+request succeeded. Update the same UI your human flow updates: navigate,
+invalidate a query, dispatch an event.
+
+The generated tools leave a marked spot for exactly this, below the marker where
+you own the code. The pattern is in [Make the effect
+visible](/docs/visible-effects).
+
+## 7. Put the checks in CI
+
+`verify` exits `1` on errors, so it is a one-line CI gate:
+
+```bash
+npx @webmcp-stack/codegen verify
+```
+
+Run it on pull requests that touch your spec or your tools. A destructive
+endpoint that lost its classification, a description that tries to instruct the
+agent, a tool with nothing an agent can act on: all of it shows up before it
+ships. Add `generate --dry-run` if you also want the audit for the spec itself.
+
+## 8. Regenerate as your API changes
+
+The point of generating is that the second run is safe. When your API changes,
+re-run `generate`:
+
+```bash
+npx @webmcp-stack/codegen generate
+```
+
+Only the generated region of each file updates. Your `execute()` bodies, your
+overrides, and your dashboard edits stay put. If you hand-edited a generated
+region, the tool leaves your file alone and writes its version to a `.new`
+sibling instead of overwriting you. See [The regeneration
+contract](/docs/regeneration).
+
+## 9. Keep the surface small
+
+The healthiest sign is not "we exposed everything". It is a surface an agent can
+hold in its head. Three habits do most of the work:
+
+- Withhold anything an agent should not do on its own.
+- Prefer a journey over exposing each step as a standalone tool.
+- When the surface grows, ask whether two tools are really one intent.
+
+`verify` warns when the surface grows past what agents handle well, and counts
+journey tools too, so this stays visible instead of drifting.
+
+## 10. When something breaks
+
+Most first-run problems are a URL or a session, not the tool. The
+[Troubleshooting](/docs/troubleshooting) page covers the common ones: a 404 on a
+relative URL, the dashboard working where the browser does not, and a
+withheld tool that never appears.

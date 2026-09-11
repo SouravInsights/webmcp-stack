@@ -1,80 +1,90 @@
 ---
 title: Introduction
-description: Generate safe, typed, human-reviewed WebMCP tools from your OpenAPI spec or validation schemas.
+description: Generate safe, reviewable WebMCP tools from the API contract you already have, so agents can act on your site without guessing.
 ---
 
 ## The problem
 
-WebMCP lets your web app expose tools that AI agents can call, but somebody has to write
-those tools. Today that means hand-writing a `registerTool()` call per action: a name, a
-description, a JSON Schema for the inputs, an `execute` function. For one endpoint that's a
-chore. For an API with seventy endpoints it's a project nobody starts.
+People are already pointing agents at the sites they use. Today those agents
+read your HTML and guess which control does what. [WebMCP](https://github.com/webmachinelearning/webmcp)
+is the browser's answer: your page can register a small set of typed tools that
+an agent calls directly, in the signed-in user's session.
 
-And the details matter more than they look: a tool's **description is literally part of the
-prompt** the agent reasons over, and its **schema is the contract** the agent fills in.
-Hand-written copies of things your code already knows go stale, drift, and lie.
+Somebody has to write those tools. Hand-writing a `registerTool()` call per
+action, a name, a description, a JSON Schema, an `execute` function, is a chore
+for one endpoint and a project nobody starts for seventy. And the details matter
+more than they look: a tool's **description is part of the prompt** the agent
+reasons over, and its **schema is the contract** the agent fills in. Hand-written
+copies of what your code already knows drift, and drift means the agent calls
+the wrong thing.
 
-## What webmcp-codegen does
+## What webmcp-stack does
 
-You already have the source of truth: an OpenAPI spec, or validation schemas (zod, valibot,
-arktype, TypeBox) your app uses. webmcp-codegen turns them into WebMCP tools, written as real
-TypeScript files in your repo:
+You already have the source of truth: an OpenAPI spec, or the validation
+schemas (zod, valibot, arktype, TypeBox) your app uses. `@webmcp-stack/codegen`
+turns them into WebMCP tools, written as real TypeScript files in your repo:
 
 ```bash
 npx @webmcp-stack/codegen generate
 ```
 
-```
-Detected apps/server/openapi/openapi.json (override with --spec)
-Found your web app: apps/web (next)
+In that one run, three things happen. Tools are generated: reads work
+immediately, mutations are generated but withheld until you enable them. Bad
+agent endpoints are filtered or flagged: webhooks, auth, admin. And registration
+is wired into your app, as two additive lines you can see and undo.
 
-webmcp-codegen: 7 tool(s)
+Beyond the endpoints:
 
-  note: Stripped the shared "v1" version prefix from tool names.
-
-  1 endpoint(s) skipped:
-    POST /v1/payments/webhook: a webhook receives server callbacks
-
-  list-trips              [read]         ← GET /v1/trips/
-  create-trip             [write]        withheld
-  delete-trip             [destructive]  withheld
-  ...
-
-  registration:
-    created apps/web/src/webmcp/register.tsx
-    added 2 lines to apps/web/src/app/layout.tsx
-```
-
-Three things happen in that one run. Tools are generated (read tools with working
-implementations, mutations generated but disabled until you uncomment them). Endpoints that
-should not be agent tools are filtered or flagged (webhooks, auth, admin). And registration
-is wired into your app, two additive lines you can see and undo.
+- **Handshake grouping.** Two calls that are really one action (request an
+  upload, then complete it) become one withheld coarse tool.
+- **Journeys.** Multi-step goals get a shared draft, one tool per step, and a
+  submit gate that asks the human before the real write. See
+  [Journeys](/docs/journeys).
+- **A skill file.** `generate` writes `.agents/skills/webmcp-tools/SKILL.md` so
+  your own coding agent knows the rules when it extends the surface. See
+  [Working with your coding agent](/docs/working-with-your-agent).
 
 ## Three promises
 
-**Tools work out of the box.** The spec knows the method, path, and parameters, so read
-tools are born calling your real API with the signed-in user's session. Mutations get the
-same working code, commented out, one deliberate edit away.
+**Tools work out of the box.** The spec knows the method, path, and parameters,
+so read tools are born calling your real API with the signed-in user's session.
+Mutations get the same working code, commented out, one deliberate edit away.
 
-**You own the output.** Generated files are plain TypeScript in your repo. No runtime
-dependency on webmcp-codegen. Uninstall it after generating and everything still works.
+**You own the output.** Generated files are plain TypeScript in your repo. No
+runtime dependency on webmcp-stack. Uninstall it after generating and everything
+still works.
 
-**Regeneration never clobbers your code.** The API contract lives above a marker line and
-regenerates freely. Your code lives below it and is never touched. Hand-edit the generated
-region and you get a `.new` file to merge, never a silent overwrite.
+**Regeneration never clobbers your code.** The API contract lives above a marker
+line and regenerates freely. Your code lives below it and is never touched.
+Hand-edit the generated region and you get a `.new` file to merge, never a
+silent overwrite.
 
-## See it before you run it
+## What it does not do
 
-Every claim on this page is verifiable without installing anything:
+Being clear about the edges is part of using it well:
 
-```bash
-npx @webmcp-stack/codegen generate --dry-run
-```
+- It does not decide your product's intents. That is your knowledge, or your
+  agent's, guided by the skill file.
+- It does not make an unsafe API safe. Every tool calls your real endpoint, so
+  your server still validates, authorizes, and rate-limits.
+- It does not run a model. Generation is deterministic, no key, no network.
 
-A dry run writes nothing. It shows you the tools, the safety report, and the plan.
+## Where to start
+
+<Cards>
+  <Card title="Why tools for agents" href="/docs/why-agent-tools">
+    Why a small, well-described surface matters, and what a model can and cannot do with your site.
+  </Card>
+  <Card title="Quickstart" href="/docs/quickstart">
+    One command, working tools, wired into your app.
+  </Card>
+  <Card title="After you generate" href="/docs/after-you-generate">
+    The loop that turns a generated surface into one you trust.
+  </Card>
+</Cards>
 
 ## Status
 
-WebMCP is an early-stage spec. The tools work today in Chrome behind a flag, and elsewhere
-with a small polyfill. OpenAPI is the supported source; tRPC, Zod, and Prisma are on the
-roadmap.
+WebMCP is an early-stage spec. The tools work today in Chrome behind a flag and
+in the origin trial, and elsewhere with a small polyfill. OpenAPI is the
+supported source; validation schemas are supported; tRPC is on the roadmap.
