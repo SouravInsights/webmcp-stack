@@ -616,7 +616,7 @@ export async function callApi(
 const TOOL_OUTPUT_MAX = 1536;
 
 const TRUNCATED_NOTICE =
-  "\n… [truncated to fit the 1.5K output budget — return a smaller slice or paginate]";
+  "\\n… [truncated to fit the 1.5K output budget — return a smaller slice or paginate]";
 
 /**
  * Wrap a result in the MCP shape, so tool bodies stay one line. The result
