@@ -1,0 +1,201 @@
+---
+title: Testing your tools
+description: Generated tools are ordinary TypeScript. Here is how to test them without a browser, and the one thing that still needs a browser.
+---
+
+The generated files are plain TypeScript in your repo, and they export the
+pieces you want to test: a raw caller (`fetchGetTrip`) and an agent-facing
+function (`executeGetTrip`). That means most of your surface can be tested the
+way you test the rest of your app.
+
+<Callout>
+  A journey's draft and submit gate are library code you did not write and do
+  not own. Test the `store` and `build` functions you wrote, and test the whole
+  flow in a browser. Do not test the generated region.
+</Callout>
+
+<Steps>
+<Step>
+### Test the request without a browser
+
+`fetchGetTrip` calls your API through `callApi`, which uses `fetch`. Mock
+`fetch` and assert both the request and the parsed body. This is the test that
+catches a wrong path, method, or body long before an agent does.
+
+```ts title="src/webmcp/get-trip.test.ts"
+// @vitest-environment happy-dom
+import { afterEach, expect, it, vi } from "vitest";
+import { fetchGetTrip } from "./get-trip.webmcp";
+
+afterEach(() => vi.unstubAllGlobals());
+
+it("calls the endpoint and returns the parsed body", async () => {
+  const calls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ id: "trip_1", title: "Lisbon" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+
+  const trip = await fetchGetTrip({ id: "trip_1" });
+
+  expect(calls[0]).toContain("/v1/trips/trip_1");
+  expect(trip).toMatchObject({ id: "trip_1" });
+});
+```
+
+The `happy-dom` environment matters: `callApi` resolves a relative path against
+`window.location.origin`.
+
+</Step>
+<Step>
+### Test the result the agent reads
+
+`executeGetTrip` wraps the response with `toolResult`, which is the text an
+agent actually sees. Assert the shape, not the whole string.
+
+```ts
+import { executeGetTrip } from "./get-trip.webmcp";
+
+it("wraps the result for the agent", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ id: "trip_1" }), { status: 200 })),
+  );
+
+  const result = await executeGetTrip({ id: "trip_1" });
+
+  expect(result.isError).toBeUndefined();
+  expect(result.content[0]?.text).toContain("trip_1");
+});
+```
+
+</Step>
+<Step>
+### Know what throws
+
+`fetchGetTrip` and `executeGetTrip` throw on a failed request. The readable
+error an agent sees is produced one level up, in the generated registration
+wrapper, which catches the throw and returns `asToolError(error)`.
+
+So a unit test of the raw caller should assert the throw:
+
+```ts
+it("throws on a failed response", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("nope", { status: 500, statusText: "Server Error" })),
+  );
+
+  await expect(fetchGetTrip({ id: "trip_1" })).rejects.toThrow("500");
+});
+```
+
+</Step>
+<Step>
+### Test a journey's logic
+
+The draft and the gate belong to `journey.webmcp.ts`, so leave them alone.
+Export the two functions you wrote and test those on their own.
+
+```ts title="src/webmcp/journeys/book-ride.webmcp.ts"
+import { createJourney } from "../journey.webmcp";
+import { geocodeAddressTool, fetchGeocodeAddress } from "../geocode-address.webmcp";
+import { executeRequestRide, type RequestRideInput } from "../request-ride.webmcp";
+
+export const storeDestination = (place: unknown) => ({ destination: place });
+export const buildRideInput = (draft: Readonly<Record<string, unknown>>) =>
+  draft as RequestRideInput;
+
+export const bookRide = createJourney({
+  name: "book-ride",
+  goal: "Book a ride to a destination the user gives",
+  steps: {
+    "resolve-destination": {
+      tool: geocodeAddressTool,
+      call: (input, signal) => fetchGeocodeAddress(input as never, signal),
+      store: storeDestination,
+      provides: ["destination"],
+    },
+    // ...
+  },
+  submit: {
+    description: "Request the ride and show the driver's details.",
+    build: buildRideInput,
+    run: executeRequestRide,
+  },
+});
+```
+
+Now the parts with logic are ordinary functions:
+
+```ts title="src/webmcp/journeys/book-ride.test.ts"
+import { expect, it } from "vitest";
+import { buildRideInput, storeDestination } from "./book-ride.webmcp";
+
+it("stores the resolved place under its draft field", () => {
+  const place = { lat: 37.6, lng: -122.4, label: "SFO" };
+  expect(storeDestination(place)).toEqual({ destination: place });
+});
+
+it("assembles the ride request from a full draft", () => {
+  const input = buildRideInput({
+    destination: { lat: 37.6, lng: -122.4 },
+    pickupAt: "2026-03-14T19:30:00Z",
+  });
+  expect(input).toMatchObject({ pickupAt: "2026-03-14T19:30:00Z" });
+});
+```
+
+</Step>
+<Step>
+### Test the whole thing in a browser
+
+The one thing unit tests cannot cover is the real thing: registration, the
+browser validating input against the schema, the confirmation dialog, and the
+page updating. That needs a browser with the signed-in session.
+
+Open your app with WebMCP enabled, use the DevTools panel to call the tools by
+hand, and go all the way through the submit gate, including the confirmation.
+See [Chrome DevTools WebMCP panel](/docs/devtools).
+
+</Step>
+</Steps>
+
+## What not to test
+
+- **The generated region.** It is derived from your spec and regenerated. Test
+  the spec indirectly through `verify`, and test your `execute` bodies.
+- **The runtime helpers.** `callApi`, `toolResult`, and `asToolError` are
+  library code. If you find a bug in them, fix it in your repo and send it
+  upstream; do not snapshot their output.
+- **The draft's lifetime.** That the draft resets on reload is a documented
+  behavior, not something to assert in a unit test.
+
+## Put the mechanical checks in CI
+
+Unit tests cover logic. `verify` covers the surface itself: names, description
+budgets, the journey gate. Run both in CI.
+
+```bash
+npx @webmcp-stack/codegen verify
+```
+
+## Next
+
+<Cards>
+  <Card title="After you generate" href="/docs/after-you-generate">
+    Where testing fits in the wider loop.
+  </Card>
+  <Card title="Make the effect visible" href="/docs/visible-effects">
+    What to check on screen when a tool runs.
+  </Card>
+  <Card title="Troubleshooting" href="/docs/troubleshooting">
+    The common first-run failures.
+  </Card>
+</Cards>

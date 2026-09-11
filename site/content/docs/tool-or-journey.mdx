@@ -1,0 +1,105 @@
+---
+title: Tool, group, or journey?
+description: Three shapes for three different problems. Pick the wrong one and the agent gets more surface than it can use.
+---
+
+The surface an agent uses well is small and intent-shaped. When you add a
+capability, it takes one of three shapes. This page is how to tell which.
+
+## The short answer
+
+| The problem | The shape | What it looks like |
+| --- | --- | --- |
+| One action, one call | **A tool** | `cancel-order`, `search-products` |
+| One action the API split into two calls | **A grouped tool** | `upload-media` wrapping request-upload and complete-upload |
+| A goal that takes several calls, shares state, and ends in one write | **A journey** | `book-ride`: resolve, schedule, confirm |
+
+## A tool
+
+Most things are a tool. If an agent can express the whole action as one call
+with the inputs it already has, you are done. The generator makes these from
+your spec, and reads work immediately.
+
+The question to ask is not "does this endpoint exist" but "would a helpful
+person do this in one step". If yes, it is a tool.
+
+## Grouping
+
+Some endpoints only make sense together. Requesting an upload and completing it
+are one action that the API happens to split in two calls. An agent should never
+have to orchestrate that handshake, so the generator detects the pair and emits
+one coarse, withheld tool next to the members.
+
+You do not usually decide this. Grouping happens at generate time from the spec,
+merges only when the rules are exact, and skips anything fuzzy with a note. You
+adopt the proposal by enabling it.
+
+## A journey
+
+Reach for a journey when all of these are true:
+
+- **The goal takes more than one call.** Resolve a destination, then set a time,
+  then request the ride.
+- **The steps share state.** A later step or the submit needs what an earlier
+  step produced.
+- **At least one input cannot be invented.** The ride needs coordinates, which
+  only the geocoder can provide. An agent that guesses gets rejected.
+- **The end is a real write that a person should confirm.**
+
+If a goal has the first two but not the last, you may still want a journey: it
+is how you keep a multi-call flow from becoming several loose tools the agent
+has to sequence itself.
+
+The [journeys page](/docs/journeys) is the walkthrough.
+
+## Signs it should not be a journey
+
+- **One call.** That is a tool. A one-step journey is a tool with extra steps.
+- **No shared state.** If each step is independent, the agent can just call the
+  tools. Wrapping them adds surface without adding safety.
+- **More than five steps.** Past five, you are usually describing two journeys.
+- **It is really about navigation.** Moving the page around is app behavior, not
+  a tool call. Keep it in your UI.
+
+## Signs it should not be a tool
+
+- **The name mirrors the route.** `post-v1-trips-id-cancel` is an endpoint
+  wearing a name. The intent is `cancel-trip`.
+- **It only makes sense inside a flow.** If calling it alone leaves the app in a
+  broken state, it belongs to a journey, not the public surface.
+- **Two tools are really one decision.** If an agent always calls them together,
+  they are one tool.
+
+<Accordions>
+  <Accordion title="What if two agents could run the same journey at once?">
+    The draft is one object per page load, so two parallel attempts at the same
+    journey share it and overwrite each other. That is accepted, not handled.
+    Agents work one thing at a time in practice, and a reload starts clean.
+  </Accordion>
+  <Accordion title="What if a step needs a value from another journey?">
+    Read it from that journey's draft is not supported, because drafts are
+    private to a journey. If two flows genuinely share state, they are probably
+    one journey. If they do not, pass the value from the first submit's result
+    into the second journey's step as normal input.
+  </Accordion>
+  <Accordion title="What if the flow needs to open the page">
+    Whether a step navigates is app behavior, not a tool concern. The journey's
+    submit runs your real tool, so whatever that tool does to the page when a
+    person clicks the button is what should happen here too. See
+    [Make the effect visible](/docs/visible-effects).
+  </Accordion>
+</Accordions>
+
+## Next
+
+<Cards>
+  <Card title="Journeys" href="/docs/journeys">
+    The multi-step primitive, with a full example.
+  </Card>
+  <Card title="Safety and the audit" href="/docs/safety">
+    How classification and withholding decide what agents can reach.
+  </Card>
+  <Card title="After you generate" href="/docs/after-you-generate">
+    The loop that turns the surface into one you trust.
+  </Card>
+</Cards>

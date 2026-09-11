@@ -1,0 +1,145 @@
+---
+title: Prompt cookbook
+description: Copy-paste prompts for the jobs that come up again and again on an agent surface, with what to check afterwards.
+---
+
+Every `generate` run writes `.agents/skills/webmcp-tools/SKILL.md`, so a coding
+agent that reads your repo already knows the naming rules, the budgets, and the
+journey pattern. What it cannot know is your product. These prompts give it that
+context.
+
+Copy one, replace the names in it with yours, and run it. You do not need a
+coding agent to use them; each one also works as a checklist for doing the task
+by hand.
+
+<Callout type="warn">
+  Read the diff before you accept it, and do not let an agent enable a write on
+  its own. Enabling a write is a human decision about what a model may do while
+  acting as your user.
+</Callout>
+
+## Improve one description
+
+Descriptions are the highest-leverage edit on the surface, because the model
+reads them as part of the prompt.
+
+```text
+Read .agents/skills/webmcp-tools/SKILL.md and src/webmcp/list-trips.webmcp.ts.
+The description reads mechanical. Rewrite it so an agent knows what the tool
+does, when to use it, and what it returns, within the skill's budget. Put the
+new text in .webmcp-codegen.json, not inside the generated region.
+```
+
+**Then:** run `verify`, and check that the override landed in
+`.webmcp-codegen.json` rather than in the generated file.
+
+## Write a journey
+
+A good journey prompt names the goal, the value the agent cannot invent, and the
+step that needs a human.
+
+```text
+Read .agents/skills/webmcp-tools/SKILL.md and the generated tools in src/webmcp.
+
+Write a journey called book-ride in src/webmcp/journeys. Goal: let a user book a
+ride to a destination they give.
+
+- The ride API needs coordinates, which only the geocode endpoint can provide.
+  Compose the generated geocode-address tool for that step and store the result
+  on the draft as destination.
+- The user sets a pickup time in a second step.
+- Requesting the ride is a write, so it goes through the submit gate, not a
+  step. Use the real request-ride execute as the submit's run.
+
+Run npx @webmcp-stack/codegen verify when you are done and fix what it reports.
+```
+
+**Then:** confirm every step is a read, and the write sits in `submit`.
+
+## Review the whole surface
+
+Useful before a release or after a big spec change.
+
+```text
+Read .agents/skills/webmcp-tools/SKILL.md and every file in src/webmcp. For each
+tool, answer: is the name intent-shaped, does the description say what the tool
+returns, and should an agent be able to call it at all? Do not enable any
+withheld tool. Return a table with the tool, the verdict, and the reason.
+```
+
+**Then:** turn the table into issues or edits. An agent suggesting a write be
+enabled is a question for you, not an action.
+
+## Name a tool or journey
+
+Naming is where an agent without product context goes wrong most quietly.
+
+```text
+Before naming anything, read what this product is: [one or two sentences about
+who uses it and when]. Then suggest names for [the tool or flow] that say what
+the user is doing, not what the endpoint is. Give me three options and the
+reasoning for each.
+```
+
+**Then:** pick the name yourself. A name can pass every mechanical check and
+still be wrong for the product.
+
+## Fix a failing verify
+
+```text
+Run npx @webmcp-stack/codegen verify and fix every error. For warnings, list
+them and propose a fix for each; do not change a description's meaning just to
+make it shorter. Re-run verify when you are done.
+```
+
+**Then:** read the warnings yourself. The trim is a judgment call, not a
+mechanical one.
+
+## Do a safety pass
+
+```text
+Read .agents/skills/webmcp-tools/SKILL.md. Review src/webmcp for three things:
+output fields that look like personal data, descriptions that instruct the agent
+instead of describing the tool, and read tools that actually perform writes.
+Report findings with the file and line, and change nothing.
+```
+
+**Then:** decide what to fix. The report is the deliverable.
+
+## Add a tool that is not in the spec
+
+```text
+I want agents to be able to [action]. Look at the tools in src/webmcp and the
+source in codegen.config.mjs. Add a tool for it in the style the skill file
+expects, or tell me if it should be a journey instead. Do not enable any write.
+```
+
+**Then:** check the schema and description against the skill's rules, and run
+`verify`.
+
+## Enable a withheld write
+
+Do this one yourself, or have the agent prepare it while you approve.
+
+```text
+I want to allow agents to [action]. Find the tool, show me what it does and
+whether it confirms with the user before running, then enable that one tool in
+.webmcp-codegen.json. Do not enable anything else.
+```
+
+**Then:** read the diff, then test the tool in the browser and go through the
+confirmation dialog yourself.
+
+## Next
+
+<Cards>
+  <Card title="Working with your coding agent" href="/docs/working-with-your-agent">
+    What the skill file teaches, and how to check an agent's work.
+  </Card>
+  <Card title="Tool, group, or journey?" href="/docs/tool-or-journey">
+    Which shape a given problem should take.
+  </Card>
+  <Card title="Testing your tools" href="/docs/testing">
+    How to test the generated code and a journey's logic.
+  </Card>
+</Cards>
