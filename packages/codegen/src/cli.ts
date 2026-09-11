@@ -85,7 +85,7 @@ Examples
   npx @webmcp-stack/codegen generate --verbose    # see all 72 tools listed
 
 Docs
-  https://webmcp-stack.vercel.app/docs
+  https://webmcp.souravinsights.com/docs
 `;
 
 export interface CliFlags {
@@ -216,7 +216,7 @@ async function init(): Promise<number> {
     info("schemas; see the commented block in the config.");
   }
   info("\nEdit it to add sources, change the output directory, or set safety options.");
-  info("Docs: https://webmcp-stack.vercel.app/docs/configuration\n");
+  info("Docs: https://webmcp.souravinsights.com/docs/configuration\n");
   return 0;
 }
 

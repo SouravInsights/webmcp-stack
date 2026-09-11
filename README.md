@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://webmcp-stack.vercel.app">
+  <a href="https://webmcp.souravinsights.com">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./brand/logo-mark.svg">
       <source media="(prefers-color-scheme: light)" srcset="./brand/logo-mark-light.svg">
@@ -14,9 +14,9 @@
     <a href="./LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
   </p>
   <p>
-    <a href="https://webmcp-stack.vercel.app/docs">Docs</a> |
+    <a href="https://webmcp.souravinsights.com/docs">Docs</a> |
     <a href="https://www.npmjs.com/package/@webmcp-stack/codegen">npm</a> |
-    <a href="https://webmcp-stack.vercel.app/brand">Brand</a> |
+    <a href="https://webmcp.souravinsights.com/brand">Brand</a> |
     <a href="./docs/about.md">About</a>
   </p>
 </div>

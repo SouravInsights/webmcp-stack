@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://webmcp-stack.vercel.app">
+  <a href="https://webmcp.souravinsights.com">
     <img alt="webmcp-stack" src="https://raw.githubusercontent.com/SouravInsights/webmcp-stack/main/brand/logo-mark-tile.svg" width="72" height="72">
   </a>
   <h1>@webmcp-stack/codegen</h1>
@@ -9,7 +9,7 @@
     <a href="https://github.com/SouravInsights/webmcp-stack/blob/main/LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square&labelColor=0a0b0f&color=58a6ff"></a>
   </p>
   <p>
-    <a href="https://webmcp-stack.vercel.app/docs">Docs</a> |
+    <a href="https://webmcp.souravinsights.com/docs">Docs</a> |
     <a href="https://github.com/SouravInsights/webmcp-stack">GitHub</a> |
     <a href="https://github.com/SouravInsights/webmcp-stack/issues">Issues</a>
   </p>
