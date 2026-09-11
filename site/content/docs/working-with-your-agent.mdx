@@ -63,16 +63,15 @@ the goal, the data the agent cannot invent, and the moment that needs a human:
 > Read `.agents/skills/webmcp-tools/SKILL.md` and the generated tools in
 > `src/webmcp`.
 >
-> Write a journey called `document-trip` in `src/webmcp/journeys`. Goal: let a
-> user record a trip they have already taken and open the editor to write its
-> story.
+> Write a journey called `book-ride` in `src/webmcp/journeys`. Goal: let a user
+> book a ride to a destination they give.
 >
-> - The trip needs a resolved `locationObject`, which only the autocomplete
->   endpoint can provide. Compose the generated `get-autocomplete` tool for
->   that step and store the result on the draft.
-> - The user sets a title and dates in a second step.
-> - Creating the trip is a write, so it goes through the submit gate, not a
->   step. Use the real `create-trip` execute as the submit's `run`.
+> - The ride API needs coordinates, which only the geocode endpoint can
+>   provide. Compose the generated `geocode-address` tool for that step and
+>   store the result on the draft as `destination`.
+> - The user sets a pickup time in a second step.
+> - Requesting the ride is a write, so it goes through the submit gate, not a
+>   step. Use the real `request-ride` execute as the submit's `run`.
 >
 > Run `npx @webmcp-stack/codegen verify` when you are done and fix what it
 > reports.
@@ -98,10 +97,10 @@ its work:
   step calls something that writes, the write is not behind the submit gate, and
   the human confirmation is not in the path. Ask the agent to move it into the
   submit.
-- **Check the name against your product.** `plan-trip` on a memories product
-  passes every mechanical check and is still wrong. This is the one no linter
-  catches, and it is why the skill file keeps asking the agent to understand the
-  product first.
+- **Check the name against your product.** A name can pass every mechanical
+  check and still be wrong for what the flow actually does. This is the one no
+  linter catches, and it is why the skill file keeps asking the agent to
+  understand the product first.
 
 <Callout type="warn">
   A journey is only as safe as the code in it. The submit gate, the

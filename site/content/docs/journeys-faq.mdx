@@ -1,172 +1,164 @@
 ---
 title: Journey questions, answered
-description: Every "dumb question" about journeys, answered plainly — the draft, the lifecycle, what the agent does vs. what you do, and the edge cases.
+description: The draft, the lifecycle, what the agent does and what you do, and the edge cases, answered in plain terms.
 ---
 
 # Journey questions, answered
 
 The [journeys page](/docs/journeys) explains the feature. This page answers the
-questions people actually ask once they read the code — in plain terms, no
-assumed knowledge. None of these are dumb questions; they're the ones everyone
-has.
+questions people ask once they read the code. None of them are dumb questions;
+they are the ones almost everyone has.
 
 ## Is `journey.webmcp.ts` a journey?
 
-No — and this is the most common confusion. That file never creates a journey.
-It's the factory: a reusable function, `createJourney()`, that journey files
-call. Think Lego baseplate and Lego models. `journey.webmcp.ts` is the
-baseplate — shared, generic, owned by the generator. `document-trip.webmcp.ts`
-is a model someone builds on it. The engine lives in one file; the journeys
-live elsewhere and are written per product.
+No, and this is the most common confusion. That file never creates a journey. It
+is the factory: a reusable `createJourney()` function that journey files call.
+Think of a Lego baseplate and the models built on it. `journey.webmcp.ts` is the
+baseplate, shared and owned by the generator. `book-ride.webmcp.ts` is a model
+someone builds on it. The engine lives in one file; the journeys live elsewhere
+and are written per product.
 
-## What are the three parts, in dumb terms?
+## What are the three parts, in plain terms?
 
-1. **The draft** — `let draft = {}`. A plain JavaScript object sitting in
-   memory, created once when the page loads. Every step writes something into
-   it; the final step reads everything out of it.
-2. **Step tools** — each step becomes its own normal, callable WebMCP tool
-   (`document-trip-search-places`). When the agent calls one, it runs the
-   step's logic, stuffs the result into the draft, and replies "Stored. Still
-   needed: X" or "Stored. Ready — call submit." That reply is literally how the
-   agent knows what to do next. There's no hidden orchestration — the agent
-   figures out the order by reading those messages, one call at a time.
-3. **The submit gate** — one final tool (`document-trip-submit`) that does four
-   things in strict order: check nothing's missing (refuse if it is) → ask the
-   human to confirm → only on a yes, call the real backend with the draft's
-   data → clear the draft.
+1. **The draft** is one plain object in memory, created when the page loads.
+   Steps write into it; the submit reads everything out of it.
+2. **Step tools** are ordinary WebMCP tools, one per step
+   (`book-ride-resolve-destination`). When the agent calls one, it does the
+   step's work, stores the result on the draft, and replies "Stored. Still
+   needed: X" or "Stored. The journey is ready." That reply is how the agent
+   knows what to do next. There is no hidden orchestration; the agent works one
+   call at a time and reads the messages.
+3. **The submit gate** is one final tool (`book-ride-submit`) that does four
+   things in order: check nothing is missing and refuse if it is, ask the human
+   to confirm, run the real write with the finished draft, and clear the draft.
 
 ## Why is it called a "draft"?
 
-Same reason as a draft email. It's the version-in-progress — built up piece by
-piece, and nothing is sent until the very end. It's called a draft specifically
-because it is *not yet the real thing*: nothing reaches the app's backend from
-it until the submit step.
+Same reason as a draft email. It is the version in progress, built up piece by
+piece, and nothing is sent until the end. It is a draft because it is *not* the
+real thing: nothing reaches your backend from it until the submit runs.
 
 ## What does "storing something in the draft" actually mean?
 
-Literally adding a labeled value to that one object — `title: "Lisbon Trip"`,
-`locationObject: {...}`. Like writing another line on a sticky note. No
-database, no file, no network call is involved in the storing itself.
+Adding a labeled value to that one object, like `destination: {...}` or
+`pickupAt: "2026-03-14T19:30:00Z"`. It is like writing another line on a sticky
+note. There is no database, no file, and no network call in the storing itself.
 
-## What does "in-memory" mean if I'm not technical?
+## What does "in memory" mean if I am not technical?
 
 Picture a whiteboard in a room versus a filing cabinet down the hall. The
-whiteboard is right there — fast, everyone in the room can read it instantly —
-but the moment someone wipes it or the room closes, it's gone forever, no copy
-anywhere. The filing cabinet keeps things after everyone leaves. The draft is
-the whiteboard: it lives only inside the browser tab's running memory. Close
-the tab, refresh, or navigate away, and it's wiped. Nothing durable, ever.
+whiteboard is right there, fast, and everyone in the room can read it, but the
+moment the room closes it is gone. The filing cabinet keeps things after
+everyone leaves. The draft is the whiteboard: it lives only inside the browser
+tab's running memory. Close the tab, refresh, or navigate away and it is wiped.
+Nothing durable, ever.
 
-## What's the shape of this store?
+## What is the shape of the draft?
 
-The simplest possible: a flat bag of labeled values —
-`{ locationObject: {...}, title: "Lisbon Trip" }`. No nesting enforced, any
-step can write any field. One caveat: if two steps use the same field name,
-the second silently overwrites the first. Avoiding that is on whoever writes
-the journey.
+The simplest possible: a flat bag of labeled values, for example
+`{ destination: {...}, pickupAt: "2026-03-14T19:30:00Z" }`. Nothing enforces
+nesting, and any step can write any field. One caveat: if two steps use the same
+field name, the second silently overwrites the first. Avoiding that is on
+whoever writes the journey.
 
 ## Will it hold data reliably for a session?
 
-Depends what you mean by session:
+It depends what you mean by session:
 
-- **Within one continuous page view** (tab open, agent working, no refresh) —
-  yes, completely. It's a variable in memory; nothing can drop it mid-flow.
-- **Across a reload, a closed tab, or a new tab** — no, and that's deliberate.
-  It is never meant to outlive one uninterrupted visit.
+- **Within one continuous page view** (tab open, agent working, no refresh): yes,
+  completely. It is a variable in memory and nothing drops it mid-flow.
+- **Across a reload, a closed tab, or a new tab:** no, deliberately. It is never
+  meant to outlive one uninterrupted visit.
 
 ## How does it store results from the real backend?
 
-Subtle but important: **not every step touches the backend.** A step like
-`set-details` has no logic — it stores whatever the agent typed, verbatim, no
-network call at all. A step like `search-places` calls the app's real search
-API and stores the real answer. So the draft ends up holding a mix: some
-fields are "what the agent said," some are "what the server said." Either way,
-nothing is created or changed for real until the final submit.
+Not every step touches the backend. A step like `set-pickup-time` has no logic;
+it stores whatever the agent passed in, verbatim, with no network call. A step
+like `resolve-destination` calls the app's real geocoder and stores the real
+answer. So the draft ends up holding a mix: some fields are "what the agent
+said", some are "what the server said". Either way, nothing is created or
+changed for real until the submit.
 
 ## Why is the draft created only once per page load?
 
-Because `createJourney()` — the function that sets up `let draft = {}` — runs
-once, at page load, not per attempt. So there's one shared scratchpad per
-journey per page visit. Fine for the realistic case (one agent, one user, one
-thing at a time). The unhandled edge case: two parallel attempts at the *same*
-journey on one page would share and overwrite the same draft. Accepted, not
-handled.
+Because `createJourney()`, the function that sets up the draft, runs once at
+page load, not per attempt. There is one shared scratchpad per journey per page
+visit. That is fine for the realistic case: one agent, one user, one thing at a
+time. The unhandled edge case is two parallel attempts at the *same* journey on
+one page, which would share and overwrite the same draft. Accepted, not handled.
 
-## What is a "half-finished journey," and why would it happen?
+## What is a "half-finished journey", and why would it happen?
 
-The agent completes `search-places`, then the person closes the laptop, gets
-distracted, the tab crashes — before the remaining steps and submit. Some steps
-done, nobody submitted: half-finished. Keeping the draft memory-only means a
-reload always starts completely clean — no stale, half-filled attempt from
-three days ago reappearing with an outdated search result. Throwing away
-incomplete progress is the feature, not a gap.
+The agent resolves the destination, then the person closes the laptop or the tab
+crashes, before the rest of the steps and the submit. Some steps done, nothing
+sent. Keeping the draft in memory means a reload always starts clean, with no
+stale, half-filled attempt from three days ago reappearing with an outdated
+result. Throwing away incomplete progress is the feature, not a gap.
 
 ## Does a journey reuse the tools codegen already generated?
 
-Yes, directly — it never reimplements anything. A tool-backed step calls the
-same underlying request the standalone tool uses; the submit's `run` is the
-existing write tool's `execute`. The journey just wraps them with the gate and
-confirmation. Bonus: a risky write like `create-trip` — normally generated
-withheld — never needs to be switched on as a standalone tool at all. The
-journey's submit becomes its only door, with prerequisite checks and a human
-confirmation built in. Wrapping a risky tool in a journey is a *safer* way to
+Yes, directly, and it never reimplements anything. A tool-backed step calls the
+same underlying request the standalone tool uses, and the submit's `run` is the
+existing write tool's execute. The journey wraps them with the gate and the
+confirmation. Bonus: a risky write like `request-ride`, normally generated
+withheld, never has to be enabled as a standalone tool at all. The journey's
+submit becomes its only door, with the prerequisite checks and a human
+confirmation built in. Wrapping a risky tool in a journey is a safer way to
 expose it than enabling it directly.
 
 ## How does the agent know these tools exist?
 
-No special channel — ordinary WebMCP discovery. On page load, every registered
-tool (normal ones, journey steps, journey submits) lands in one flat list the
-browser exposes. The agent asks the page "what can I do here," gets the whole
-list, with zero formal distinction between "normal tool" and "part of a
-journey." The only grouping signal is baked into the text: each step's name
-carries the journey prefix (`document-trip-…`), and each description ends with
-*"Part of document-trip: Record a trip you've been on…"* The agent reads that
-and infers the connection — the same way it figures out anything else: by
-reading. The stitching is done by the factory, mechanically, so it can't be
-forgotten.
+There is no special channel: ordinary WebMCP discovery. On page load, every
+registered tool, including journey steps and submits, lands in one flat list the
+browser exposes. The agent asks the page what it can do and gets the whole list,
+with no formal distinction between a normal tool and part of a journey. The only
+grouping signal is in the text: each step's name carries the journey prefix
+(`book-ride-…`), and each description ends with something like *"Part of
+book-ride: Book a ride to a destination the user gives."* The agent reads that
+and infers the connection, the same way it figures out anything else. The
+factory stitches it mechanically, so it cannot be forgotten.
 
-## What does the agent do vs. what do I do?
+## What does the agent do, and what do I do?
 
-The agent's job is orchestration and conversation: figure out what to call
-next from the reply messages, ask you for anything it can't get from the
-backend. Your job is exactly one thing: the final yes/no on the confirmation
-dialog before anything real happens. The agent cannot click that dialog for
-you — a human click is the only way through.
+The agent's job is orchestration and conversation: work out what to call next
+from the replies, and ask the user for anything it cannot get from the backend.
+Your job is exactly one thing: the final yes or no on the confirmation dialog
+before anything real happens. The agent cannot click that dialog for you. A
+human click is the only way through.
 
 ## Can the agent call the steps out of order?
 
-The order isn't enforced by code — an agent could call `set-details` before
-`search-places`. It mostly self-corrects: a step that needs an earlier step's
-draft field fails with a readable error ("Not ready…" or a failed call naming
-what it needed), which nudges the agent back. One honest caveat: that
-self-correction depends on the step failing *usefully* when called early —
-which is on whoever writes the journey, not something the shared machinery
-guarantees.
+The order is not enforced by code, so an agent could call `set-pickup-time`
+before `resolve-destination`. It mostly self-corrects: a step that needs an
+earlier step's draft field fails with a readable message naming what is missing,
+which nudges the agent back. One honest caveat: that self-correction depends on
+the step failing *usefully* when called early, which is on whoever writes the
+journey, not something the shared machinery guarantees.
 
 ## What happens if I decline the confirmation?
 
-The agent is told "The user declined this action," and the draft is left
-as-is — not wiped. You can change your mind, adjust something, and submit
+The agent is told "The user declined this action", and the draft is left
+untouched, not wiped. You can change your mind, adjust something, and submit
 later without starting over.
 
 ## Why can't codegen just generate the journeys for me?
 
-Because the flow isn't in your API spec. An OpenAPI file says `POST /v1/trips`
-exists; it does not say that creating a trip is really search → set details →
-confirm, or that your product documents past trips rather than planning future
-ones. That knowledge lives in the product. A CLI guessing flows produces
-plausible-sounding garbage — tools that pass every mechanical check and are
-still wrong. So codegen stops at a hint in its report ("these endpoints look
-like one flow — declare a journey?") and the bundled skill file teaches your
-own coding agent how to write the journey file well. Your agent can ask you
-about the product; our CLI can't.
+Because the flow is not in your API spec. An OpenAPI file says `POST /v1/rides`
+exists; it does not say that booking a ride is really resolve the destination,
+then set the pickup time, then confirm. It also cannot know that your product
+wants a person to approve the ride rather than let an agent request it
+directly. That knowledge lives in the product. A CLI guessing flows produces
+plausible-sounding garbage, tools that pass every mechanical check and are still
+wrong. So codegen stops at a hint in its report and the bundled skill file
+teaches your own coding agent how to write the journey file well. Your agent can
+ask you about the product; the CLI cannot.
 
 ## Won't journeys make my tool list even bigger?
 
-They can, if you let them. `verify` now counts journey tools in the surface
-total (one per step plus the submit gate) and warns when the whole surface grows
-past what's good for agents. It's a warning, not a failed build: the browser has
-no limit on how many tools you register, only agent quality does.
+They can, if you let them. `verify` counts journey tools in the surface total,
+one per step plus the submit gate, and warns when the whole surface grows past
+what is good for agents. It is a warning, not a failed build: the browser has no
+limit on how many tools you register, only agent quality does.
 
 Keeping the surface small is a convention you follow, not something the
 generator does for you. A read tool that a journey uses still registers on its
@@ -178,5 +170,5 @@ them, so leave them withheld and the submit is their only door.
 ## What if two steps use the same draft field name?
 
 The second overwrites the first, silently. The draft is a flat bag with no
-protection — give each step's fields distinct names when you write the
-journey. (Same answer as the shape question; it bites twice.)
+protection, so give each step's fields distinct names when you write the
+journey.

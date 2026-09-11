@@ -1,167 +1,212 @@
 ---
 title: Journeys
-description: Some goals take several tool calls with shared state and one confirmed write at the end. A journey is that shape — here's exactly what ships, what you write, and what a real agent session looks like.
+description: A few steps that share state, ending in one write a person confirms. Journeys are how you describe a goal that takes more than one tool call.
 ---
 
-# Journeys
+## When one tool is not enough
 
-Some things a user asks an agent to do can't be one tool call. "Log the trip I
-took to Lisbon" means: find the real place, set the title and dates, then create
-the trip — and only a human should be able to say yes to that last part. A
-journey is that shape: **a few steps that share state, and one guarded submit at
-the end.**
+Most tools do one thing and forget it: `list-trips`, `cancel-order`,
+`search-products`. Some goals do not fit that shape. Booking a ride is not one
+call, it is:
 
-A journey is made of three pieces:
+1. turn the destination the user said into the coordinates the API needs,
+2. ask when they want to be picked up,
+3. actually request the ride, after the person agrees to it.
 
-1. **The draft** — one plain object in the page's memory. Think whiteboard, not
-   filing cabinet: steps write their results on it, the submit reads from it,
-   and it's wiped clean when the page reloads. No database, no files, nothing
-   saved anywhere.
-2. **Step tools** — each step becomes its own ordinary WebMCP tool. Calling one
-   stores what it produced into the draft and replies with what's still missing,
-   so the agent always knows the next move.
-3. **The submit gate** — one final tool that refuses until every step has
-   delivered, asks the human to confirm, and only then makes the real write —
-   using only what's in the draft. Afterward the draft resets to empty.
+Three things make this a different kind of problem:
 
-## A real session, start to finish
+- **The steps depend on each other.** The ride request needs what the first two
+  steps produced.
+- **The agent cannot invent a step's output.** It knows "SFO airport" as words.
+  The ride API needs coordinates, and those have to come from a real geocoder.
+  Ask a model to make them up and your server rejects the request.
+- **The last step changes something real.** Requesting a ride should not happen
+  because an agent decided it should. A person should say yes.
 
-beenthere.page is a journal for trips you've been on. Its journey for the core
-flow is called `document-trip`, with two steps and a submit. Here's the complete
-session — a signed-in user on their profile page, an agent in the browser, and
-one sentence from the user: *"Log the trip I took to Lisbon last March."*
+A **journey** is how you describe that goal once: a shared place to collect the
+answers, one tool per step, and a submit that a human confirms.
 
-**Page load.** The page registers its tools. Alongside the ordinary ones, three
-journey tools appear: `document-trip-search-places`, `document-trip-set-details`,
-and `document-trip-submit`. There's no special channel for journeys — the agent
-sees one flat list and learns these belong together from their names and
-descriptions, which the machinery stamps mechanically: *"Search real places and
-store the pick. Part of document-trip: Record a trip you've been on…"*
+## The mental model: a form, filled in steps
 
-**Step 1.** The agent calls `document-trip-search-places` with
-`{ input: "Lisbon" }`. That hits the real backend search, and the resolved place
-— a structured object with a `placeId`, address, country — lands in the draft.
-This matters more than it looks: the create-trip endpoint needs that object, and
-an agent can't invent it. Now it comes from the server, not from a guess. The
-tool replies: *"Stored. Still needed: document-trip-set-details."*
+The easiest way to hold journeys in your head is a form.
 
-**Step 2.** The agent calls `document-trip-set-details` with
-`{ title: "Lisbon, March 2026", startDate: "2026-03-14" }`. No backend call —
-the values are stored on the draft as-is. The tool replies: *"Stored. The
-journey is ready — call document-trip-submit."*
+- **The draft is the form.** One object in the page's memory, for the life of
+  the page. Steps write on it; the submit reads from it. It is not a database
+  and nothing is saved to disk.
+- **Each step fills in part of the form.** A step either calls one of your
+  existing tools and stores what it returns (the destination's coordinates), or
+  just takes the agent's input and stores it (the pickup time). Every step
+  replies with what is still blank, so the agent always knows the next move.
+- **The submit is the Send button.** It stays disabled until every field is
+  filled, it shows the person what is about to happen, and only then does it run
+  the real tool.
 
-**The submit.** The agent calls `document-trip-submit`. The gate checks the
-draft: `locationObject` present, `title` present — nothing missing. Then the
-page shows a real confirmation dialog: *"Allow the agent to: Create the trip and
-open it in the editor."* Only a human click can pass this — the agent cannot
-approve it for you.
+From the agent's side there is no hidden machinery. It sees a small flat list of
+tools and fills them in one at a time, reading the "still needed" reply after
+each call. Journeys do not coordinate the agent. They give it a form.
 
-**Approved.** The real `create-trip` call fires, with input assembled from the
-draft and nothing else. The draft resets to empty. The app does what it does
-when you click the button yourself: the trip is created and the editor opens on
-it. The agent turns back to the user: "Created and opened — want me to draft the
-story from your photos?"
+## The whole thing in one example
 
-If the human declines, nothing is wiped: the draft stays, and the agent is told
-the user declined. And if the tab closes mid-journey, the draft simply
-evaporates — a half-finished journey never lingers.
-
-The division of labor, the whole session: the agent orchestrates and talks to
-the user; the human does exactly one thing — approve or deny at the end.
-
-## What codegen ships vs. what you write
-
-Codegen ships the machinery, never the journeys:
-
-- **`journey.webmcp.ts`** — the `createJourney` helper, copied into your repo on
-  every `generate`, next to `runtime.webmcp.ts`. It's generator-owned: don't
-  hand-edit it; regeneration overwrites it. The draft, the step registration,
-  the gate, the confirmation — all of it lives here, once, for every journey.
-- **Registration** — the generated `index.ts` auto-imports everything in the
-  `journeys/` folder inside your tools directory (e.g.
-  `src/webmcp/journeys/`) and registers it. Drop in a journey file, re-run
-  `generate`, it's live.
-- **Checks** — `verify` validates journey files: submit gate present, steps
-  described within budget, step count small enough for an agent to track, and no
-  direct `fetch` bypassing your generated tools.
-
-What codegen never writes is the journey itself — an OpenAPI spec can't reveal
-that "create a trip" is really search → details → confirm. Only the product side
-knows the flow. So you write one small file per journey (or your coding agent
-does, guided by the bundled skill file):
+A rideshare app has two generated tools: `geocode-address` (a read) and
+`request-ride` (a write, so it is withheld until enabled). The journey that ties
+them into one goal is a single file:
 
 ```ts
-// src/webmcp/journeys/document-trip.webmcp.ts
+// src/webmcp/journeys/book-ride.webmcp.ts
 import { createJourney } from "../journey.webmcp";
-import { getAutocompleteTool, fetchGetAutocomplete } from "../get-autocomplete.webmcp";
-import { executeCreateTrip, type CreateTripInput } from "../create-trip.webmcp";
+import { geocodeAddressTool, fetchGeocodeAddress } from "../geocode-address.webmcp";
+import { executeRequestRide, type RequestRideInput } from "../request-ride.webmcp";
 
-export const documentTrip = createJourney({
-  name: "document-trip",
-  goal: "Record a trip you've been on and open the editor to write its story",
+export const bookRide = createJourney({
+  name: "book-ride",
+  goal: "Book a ride to a destination the user gives",
+
   steps: {
-    // A tool-backed step: inherits the generated tool's description and
-    // schema, calls its raw caller. You write only what lands in the draft.
-    "search-places": {
-      tool: getAutocompleteTool,
-      call: (input, signal) => fetchGetAutocomplete({ input: String(input.input) }, signal),
-      store: (places) => ({ locationObject: places }), // the resolved pick
-      provides: ["locationObject"],
+    // A tool-backed step. The agent gives an address as text; the real
+    // geocoder turns it into coordinates, and the step stores the result.
+    "resolve-destination": {
+      tool: geocodeAddressTool,
+      call: (input, signal) => fetchGeocodeAddress(input as never, signal),
+      store: (place) => ({ destination: place }),
+      provides: ["destination"],
     },
-    // A freeform step: no backend call — collects input into the draft.
-    "set-details": {
-      description: "Set the trip's title and dates.",
+
+    // A free step. No API call: the pickup time the agent passed in is
+    // stored on the draft as-is.
+    "set-pickup-time": {
+      description: "Set when the user wants to be picked up.",
       input: {
         type: "object",
-        properties: { title: { type: "string" }, startDate: { type: "string" } },
-        required: ["title"],
+        properties: {
+          pickupAt: { type: "string", description: "The pickup time, in ISO 8601." },
+        },
+        required: ["pickupAt"],
       },
-      provides: ["title"],
+      provides: ["pickupAt"],
     },
   },
+
   submit: {
-    description: "Create the trip and open it in the editor.",
-    build: (draft) => draft as CreateTripInput, // assemble the real tool's input
-    run: executeCreateTrip,                     // the existing tool does the work
+    description: "Request the ride and show the driver's details.",
+    build: (draft) => draft as RequestRideInput, // the draft becomes the tool's input
+    run: executeRequestRide, // the real write runs here, after the human confirms
   },
 });
 ```
 
+That is the whole feature. There is no config block and no new language: a
+journey is TypeScript that imports the tools you already generated.
+
+## What the agent sees
+
+On page load, `createJourney` registers three ordinary tools. They look like any
+other tool; nothing marks them as special to the agent.
+
+```text
+book-ride-resolve-destination   Fills the destination. Part of "book-ride": Book a ride...
+book-ride-set-pickup-time       Set when the user wants to be picked up. Part of "book-ride"...
+book-ride-submit                Request the ride and show the driver's details.
+```
+
+The agent fills the form by calling them in order, reading each reply:
+
+```text
+agent  book-ride-resolve-destination { "address": "SFO airport" }
+tool   Stored. Still needed: book-ride-set-pickup-time, book-ride-submit.
+
+agent  book-ride-set-pickup-time { "pickupAt": "2026-03-14T19:30:00Z" }
+tool   Stored. The journey is ready — call book-ride-submit.
+
+agent  book-ride-submit
+       (the page asks the human: "Allow the agent to: Request the ride and show the driver's details.")
+human  approves
+tool   ride requested
+```
+
+Two details are doing a lot of work here. The "still needed" replies are how the
+agent learns the order without being told it in prose. And the submit cannot run
+until the draft is full, so an agent that skips a step is refused with the list
+of what is missing, not a failed request.
+
+## How state moves between steps
+
+Three fields move the data:
+
+- **`call`** does the work. For a tool-backed step it calls the raw caller your
+  generated file exports (`fetchGeocodeAddress`), not the agent-facing wrapper.
+  You reuse one request, and the schema stays single-sourced.
+- **`store`** decides what lands on the draft. It receives the call's result and
+  returns the fields to save. This is where a resolved object becomes a named
+  form field.
+- **`provides`** names the draft fields the step is responsible for. The submit
+  refuses until every promise in every step is on the draft.
+
+The submit's **`build`** is the reverse: it takes the finished draft and
+assembles the real tool's input. Because the only path to the real input is
+`build(draft)`, an agent cannot call the write with a half-filled form.
+
 ## Rules worth knowing
 
-(Every "wait, but what if…" these rules raise is answered plainly in
-[Journey questions, answered](/docs/journeys-faq).)
-
-- **Journeys reuse your generated tools; they don't replace them.** A
-  tool-backed step inherits the tool's contract and calls the same underlying
-  request — nothing is reimplemented. Edit the tool, regenerate, and the journey
-  follows.
-- **A tool that only makes sense inside a flow shouldn't be registered on its
-  own.** `get-trip-stamp-eligibility` is meaningless outside the stamp flow, so
-  it lives only as a journey step. And a risky write — like `create-trip` —
-  stays withheld as a standalone tool forever; the journey's submit gate becomes
-  its only public door. Journeys should shrink the surface an agent sees, not
-  grow it.
-- **The submit gate can't be edited away, but a step is still your code.** The
-  gate, the confirmation, and the draft clearing live in the shared helper, so a
-  journey file can't remove them. A step's `call` and `run`, though, are code you
-  or your agent write. Keep steps to reads and draft writes; put anything that
-  changes real data in the submit, where the human is asked first. `verify`
-  only marks a step read-only when the tool it composes is a read, but it can't
-  inspect arbitrary code, so the discipline is still yours.
-- **The draft is per page load, per journey.** Within one continuous page view
-  it's fully reliable. Across a reload, it's gone — deliberately. Two parallel
-  attempts at the same journey on one page would share one draft; in practice
-  agents work one thing at a time, so this is accepted, not handled.
-- **Keep journeys short.** Two to five steps. If you're past five, you're
+- **Keep journeys short.** Two to five steps. Past five, you are usually
   describing two journeys.
+- **Steps read, submit writes.** A step should call a read tool or fill the
+  draft. Put anything that changes real data in the submit, where the human is
+  asked first. `verify` marks a step read-only only when the tool it composes is
+  a read, and it cannot inspect code you write by hand.
+- **Reuse, do not re-implement.** A tool-backed step inherits the generated
+  tool's description and schema and calls its raw caller. Edit the tool,
+  regenerate, and the journey follows. Never write a direct `fetch` in a journey
+  file; `verify` flags it.
+- **Do not double-register.** A tool that only makes sense inside a flow should
+  not also register standalone. Withhold it in `.webmcp-codegen.json`, or exclude
+  it, so the journey is its only door. Journeys should shrink the surface, not
+  grow it.
+- **The draft is per page load, per journey.** It is reliable within one page
+  view and gone on reload, on purpose. Two parallel attempts at the same journey
+  on one page share a draft; in practice agents work one thing at a time.
 
-## Grouping is a different thing
+The gate itself cannot be edited away. `journey.webmcp.ts` owns the confirmation
+and the draft clearing, and it is regenerated on every `generate`. The step
+logic is your code, which is why the rules above exist.
 
-Don't confuse journeys with what the generator's grouping does. Grouping
-*merges*: endpoints that are one action split by API shape (a request-upload
-call and a complete-upload call) become a single coarse tool — it happens at
-generate time, straight from the spec. Journeys *chain*: different decisions
-with shared state and a guarded submit, written per-product after generation.
-Same action split across calls → that's grouping. Different decisions along the
-way → that's a journey.
+## What ships, and what you write
+
+`generate` writes two things into your tools directory:
+
+- **`journey.webmcp.ts`**, the factory that defines the draft, registers the
+  steps, and holds the submit gate. Generator-owned, regenerated every run.
+- **`index.ts`** imports every file in `journeys/` and registers whatever
+  `createJourney` returns. Drop a journey file in, re-run `generate`, and it is
+  live.
+
+What it never writes is the journey itself, because an OpenAPI spec cannot tell
+it that "book a ride" is really *resolve, then schedule, then confirm*. That is
+product knowledge. You write it, or your coding agent does, guided by the
+[skill file](/docs/working-with-your-agent).
+
+## Journeys are not grouping
+
+Two features sound similar and are not:
+
+- **Grouping** merges endpoints that are one action split across two calls (a
+  request-upload plus a complete-upload) into a single tool. It happens at
+  generate time, straight from the spec, with no human input.
+- **Journeys** chain different decisions that share state and end in one guarded
+  submit. They are written per product, after generation.
+
+Same action split across calls: group it. Several decisions along the way: a
+journey.
+
+## Next
+
+<Cards>
+  <Card title="Working with your coding agent" href="/docs/working-with-your-agent">
+    How to prompt an agent to write a journey for your product.
+  </Card>
+  <Card title="Journey questions, answered" href="/docs/journeys-faq">
+    The draft, the lifecycle, and the edge cases, in plain terms.
+  </Card>
+  <Card title="After you generate" href="/docs/after-you-generate">
+    Where journeys fit in the wider loop of shipping a safe surface.
+  </Card>
+</Cards>
