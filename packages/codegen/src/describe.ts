@@ -13,6 +13,13 @@
  *   - Append, never replace. Author text (a spec description, a `.describe()`)
  *     stays verbatim; synthesized constraints follow it. The author's words are
  *     always the better text.
+ *   - Bound the machine's words, never the author's. Chrome's 500/150 budgets
+ *     are authoring guidance, not spec rules (the browser only rejects an
+ *     empty description or a name outside 1-128 chars). So machine-drafted
+ *     text is composed to fit the budget by construction, and author text is
+ *     never silently shortened. If author text runs long, verify warns and
+ *     the developer decides; losing half a sentence to a character counter is
+ *     worse than a description that is a few characters over.
  *   - Only fill silence. A field with no text at all gets a draft built from
  *     its name, type, and constraints, and that field is marked as
  *     machine-written so the audit can see it. Machine text is a floor, not a
@@ -33,16 +40,21 @@ export const TOOL_DESCRIPTION_MAX = 500;
 export const FIELD_DESCRIPTION_MAX = 150;
 
 /**
- * Fit text to a character budget. A text that fits passes through untouched.
- * One that overflows is cut at the last sentence boundary that keeps at
- * least half the budget (a cut near the end keeps the author's thought, at
- * the price of trailing sentences); otherwise it hard-cuts at a word
- * boundary and ends with an ellipsis. Composed text is always budget-safe
- * before it leaves this module, and verify measures the final result.
+ * Fit machine-drafted text to a character budget. A text that fits passes
+ * through untouched. One that overflows is cut at the last sentence boundary
+ * that keeps at least half the budget (a cut near the end keeps the thought,
+ * at the price of trailing sentences); otherwise it hard-cuts at a word
+ * boundary and ends with an ellipsis. The ellipsis is reserved inside the
+ * budget, so the result never exceeds it, even for a single unbroken token.
+ *
+ * Only call this on text this module generated. Author text is left alone
+ * on purpose (see the module comment).
  */
 export function fitBudget(text: string, budget: number): string {
   if (text.length <= budget) return text;
-  const slice = text.slice(0, budget);
+  // Leave one character for the ellipsis, so the result can never be
+  // budget + 1 when there is no space to cut at.
+  const slice = text.slice(0, budget - 1);
   const sentenceEnd = Math.max(
     slice.lastIndexOf(". "),
     slice.lastIndexOf("! "),
@@ -50,7 +62,8 @@ export function fitBudget(text: string, budget: number): string {
   );
   if (sentenceEnd >= Math.floor(budget / 2)) return slice.slice(0, sentenceEnd + 1);
   const wordEnd = slice.lastIndexOf(" ");
-  return `${(wordEnd > 0 ? slice.slice(0, wordEnd) : slice).trimEnd()}…`;
+  const body = wordEnd > 0 ? slice.slice(0, wordEnd) : slice;
+  return `${body.trimEnd()}…`;
 }
 
 /**
@@ -318,9 +331,12 @@ export function describeField(
     }
   }
 
-  // The 150-character parameter budget applies to the final text, author or
-  // machine: overflow is cut at a sentence boundary (see fitBudget).
-  result.description = fitBudget(result.description, FIELD_DESCRIPTION_MAX);
+  // Only machine-drafted text is composed to fit the budget. Author text is
+  // preserved in full; verify warns on it instead of this layer silently
+  // dropping the author's words.
+  if (result.synthesized) {
+    result.description = fitBudget(result.description, FIELD_DESCRIPTION_MAX);
+  }
   return result;
 }
 
@@ -453,7 +469,11 @@ export function describeCandidateTool(candidate: CandidateTool): void {
     const returns = candidate.outputSchema
       ? returnShapeSentence(candidate.name, candidate.outputSchema)
       : "";
-    candidate.description = [sentence, returns].filter(Boolean).join(" ");
+    // No author text existed, so this is ours to compose: fit it.
+    candidate.description = fitBudget(
+      [sentence, returns].filter(Boolean).join(" "),
+      TOOL_DESCRIPTION_MAX,
+    );
     candidate.descriptionSource = "generated-template";
     return;
   }
@@ -465,10 +485,7 @@ export function describeCandidateTool(candidate: CandidateTool): void {
       : "";
   // The join is between sentences: the base earns its period first.
   const base = returns && !/[.!?]$/.test(normalized) ? `${normalized}.` : normalized;
-  // The 500-character tool budget applies to the final text, author or
-  // machine: overflow is cut at a sentence boundary (see fitBudget).
-  candidate.description = fitBudget(
-    [base, returns].filter(Boolean).join(" "),
-    TOOL_DESCRIPTION_MAX,
-  );
+  // Author text plus a machine return sentence. The author's half is not
+  // shortened; verify warns if the total runs past the budget.
+  candidate.description = [base, returns].filter(Boolean).join(" ");
 }

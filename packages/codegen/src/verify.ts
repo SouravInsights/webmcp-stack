@@ -183,7 +183,10 @@ function hasBareField(
  * each check serves is named in its area, so the scorecard maps to the
  * design doc's table without translation.
  */
-export function verifyTools(tools: ReviewedTool[]): VerifyCheck[] {
+export function verifyTools(
+  tools: ReviewedTool[],
+  options?: { journeyToolCount?: number },
+): VerifyCheck[] {
   const registered = tools.filter((tool) => !tool.withheld);
 
   const longNames = registered
@@ -253,16 +256,17 @@ export function verifyTools(tools: ReviewedTool[]): VerifyCheck[] {
     check("Annotations", readWithoutHint, "reads declare readOnlyHint; content declares its trust"),
   ];
 
-  // The character budgets are errors: they exist to keep tool text inside
-  // agent guardrails, and CI gates on them (generation already composes
-  // within budget, so offenders here are hand-written or overrides).
+  // Chrome's character budgets are authoring guidance, not spec rules: the
+  // browser only rejects an empty description or a bad name. So an overrun is
+  // a warning that points at a shorter rewrite, never an error that blocks CI.
+  // (A long description is a quality smell, not a broken tool.)
   const budgetOffenders = [...longDescriptions, ...longParamDescriptions];
   if (budgetOffenders.length > 0) {
     checks.push({
       area: "Budgets",
       summary: `${budgetOffenders.length} over budget`,
       findings: budgetOffenders,
-      level: "error",
+      level: "warning",
     });
   }
 
@@ -277,13 +281,23 @@ export function verifyTools(tools: ReviewedTool[]): VerifyCheck[] {
     });
   }
 
-  if (registered.length > 25) {
+  // Journey tools register at runtime, so they are counted by the caller and
+  // passed in: the surface an agent actually sees is endpoint tools plus
+  // journey steps plus their submit gates. Missing this would let a journey
+  // quietly grow the surface past the budget the docs promise is watched.
+  const journeyToolCount = options?.journeyToolCount ?? 0;
+  const surfaceTotal = registered.length + journeyToolCount;
+  if (surfaceTotal > 25) {
+    const breakdown =
+      journeyToolCount > 0
+        ? `${registered.length} endpoint and ${journeyToolCount} journey`
+        : `${registered.length}`;
     checks.push({
       area: "Surface",
-      summary: `${registered.length} registered`,
+      summary: `${surfaceTotal} registered (${breakdown})`,
       findings: [
-        `${registered.length} tools register on this surface — agents choose measurably worse past a handful. ` +
-          "Withhold unreviewed tools, or narrow with safety.exclude.",
+        `${surfaceTotal} tools register on this surface (${breakdown}) — agents choose measurably worse past a handful. ` +
+          "Withhold unreviewed tools, split journeys, or narrow with safety.exclude.",
       ],
       level: "warning",
     });
@@ -416,7 +430,7 @@ export function verifyJourneyFiles(files: JourneyFileInput[]): VerifyCheck[] {
       area: "Journeys",
       summary: `${budget.length} over budget`,
       findings: budget,
-      level: "error",
+      level: "warning",
     });
   }
   if (warnings.length > 0) {
@@ -436,6 +450,20 @@ export function verifyJourneyFiles(files: JourneyFileInput[]): VerifyCheck[] {
     });
   }
   return checks;
+}
+
+/**
+ * How many tools a set of journey files registers on the page: one per step
+ * plus the submit gate. Used by the surface check, because these tools are
+ * created at runtime and never pass through the pipeline's tool list.
+ */
+export function countJourneyTools(files: JourneyFileInput[]): number {
+  let count = 0;
+  for (const { contents } of files) {
+    if (!/createJourney\s*\(/.test(contents)) continue;
+    count += journeyStepNames(contents).length + 1;
+  }
+  return count;
 }
 
 /** The --url probe: is the page actually live for a visitor's browser? */

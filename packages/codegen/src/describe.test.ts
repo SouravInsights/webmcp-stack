@@ -24,11 +24,19 @@ describe("fitBudget", () => {
   });
 
   it("hard-cuts at a word boundary with an ellipsis when no good sentence break exists", () => {
-    const text = "a b c d e f g h i j k l m n o p q r s t u v w x y z ".repeat(6) + "end";
+    const text = `${"a b c d e f g h i j k l m n o p q r s t u v w x y z ".repeat(6)}end`;
     const fitted = fitBudget(text, 150);
     expect(fitted.length).toBeLessThanOrEqual(150);
     expect(fitted.endsWith("…")).toBe(true);
     expect(fitted).not.toContain("end");
+  });
+
+  it("never exceeds the budget for a single unbroken token", () => {
+    // The regression that started this: a URL or token with no spaces used to
+    // come back at budget + 1 because the ellipsis was appended after the cut.
+    const fitted = fitBudget("x".repeat(300), 150);
+    expect(fitted.length).toBeLessThanOrEqual(150);
+    expect(fitted.endsWith("…")).toBe(true);
   });
 });
 
@@ -432,17 +440,25 @@ describe("describeCandidateInputs through nullable wrappers", () => {
 });
 
 describe("description budgets", () => {
-  it("caps author field text at the 150-character parameter budget", () => {
-    const result = describeField("notes", {
-      type: "string",
-      description: `The notes field of the record. ${"More detail about things. ".repeat(9)}`,
-    });
-    expect(result.description.length).toBeLessThanOrEqual(FIELD_DESCRIPTION_MAX);
-    expect(result.description.startsWith("The notes field of the record.")).toBe(true);
+  it("keeps long author field text verbatim instead of silently cutting it", () => {
+    const authored = `The notes field of the record. ${"More detail about things. ".repeat(9)}`;
+    const result = describeField("notes", { type: "string", description: authored.trim() });
     expect(result.synthesized).toBe(false);
+    // Chrome's budget is guidance, not a browser rule: the author's sentence
+    // survives and verify warns, rather than this layer dropping half of it.
+    expect(result.description.length).toBeGreaterThan(FIELD_DESCRIPTION_MAX);
+    expect(result.description).toContain("More detail about things.");
   });
 
-  it("caps the assembled tool description at the 500-character budget", () => {
+  it("fits machine-drafted field text to the 150-character budget", () => {
+    // No author text, so the draft is ours to trim; the long pattern makes it
+    // overflow the budget.
+    const result = describeField("value", { type: "string", pattern: "a".repeat(200) });
+    expect(result.synthesized).toBe(true);
+    expect(result.description.length).toBeLessThanOrEqual(FIELD_DESCRIPTION_MAX);
+  });
+
+  it("keeps long author tool text verbatim instead of cutting at 500", () => {
     const candidate = {
       name: "list-trips",
       description: `List the trips. ${"A long explanation of everything this endpoint could ever do. ".repeat(12)}`,
@@ -450,6 +466,7 @@ describe("description budgets", () => {
       outputSchema: { type: "array" },
     } as unknown as CandidateTool;
     describeCandidateTool(candidate);
-    expect(candidate.description.length).toBeLessThanOrEqual(TOOL_DESCRIPTION_MAX);
+    expect(candidate.description.length).toBeGreaterThan(TOOL_DESCRIPTION_MAX);
+    expect(candidate.description.startsWith("List the trips.")).toBe(true);
   });
 });

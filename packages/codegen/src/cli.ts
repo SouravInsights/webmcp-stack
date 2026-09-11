@@ -45,7 +45,13 @@ import { startDevServer } from "./dev/server.js";
 import { debug, enableVerbose, error, info, success, warn } from "./logger.js";
 import { runGenerate } from "./pipeline.js";
 import { resolveSetup } from "./setup.js";
-import { type JourneyFileInput, verifyJourneyFiles, verifyTools, verifyUrl } from "./verify.js";
+import {
+  countJourneyTools,
+  type JourneyFileInput,
+  verifyJourneyFiles,
+  verifyTools,
+  verifyUrl,
+} from "./verify.js";
 import { applyWiring, planWiring, type WirePlan } from "./wire.js";
 
 const HELP = `
@@ -333,11 +339,11 @@ async function verify(flags: CliFlags): Promise<number> {
   });
 
   const registered = result.tools.filter((tool) => !tool.withheld);
-  const checks = verifyTools(result.tools);
 
   // Journey files are the user's code, so verify can't get them from the
   // pipeline's tool list — it reads the journeys/ folder of each tools
-  // output itself and lints what it finds there.
+  // output itself and lints what it finds there. Read them first: the surface
+  // count needs to include the tools they register at runtime.
   const journeyInputs: JourneyFileInput[] = [];
   for (const output of setup.config.outputs) {
     if (output.kind !== "tools") continue;
@@ -355,6 +361,9 @@ async function verify(flags: CliFlags): Promise<number> {
       });
     }
   }
+
+  const journeyToolCount = countJourneyTools(journeyInputs);
+  const checks = verifyTools(result.tools, { journeyToolCount });
   checks.push(...verifyJourneyFiles(journeyInputs));
 
   info("");
