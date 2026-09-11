@@ -21,12 +21,11 @@
  *   AGENT_CMD='claude -p "{PROMPT}" --output-format json'
  */
 
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, "fixture");
@@ -390,8 +389,6 @@ async function main() {
   process.exit(allPassed ? 0 : 1);
 }
 
-const execFileAsync = promisify(execFile);
-void execFileAsync;
 main().catch((error) => {
   console.error(error);
   process.exit(1);

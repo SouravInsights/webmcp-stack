@@ -126,6 +126,7 @@ describe("composed tool templates", () => {
 
     expect(region).toContain("export async function fetchUploadMedia(");
     expect(region).toContain('const firstResult = (await callApi("/v1/media/request-upload"');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the emitted template literal, not interpolating in this test.
     expect(region).toContain("${firstResult.uploadId}/complete");
     expect(region).toContain("body: { fileName: input.fileName }");
     // The merged tool is a write: the confirmation gate applies.
