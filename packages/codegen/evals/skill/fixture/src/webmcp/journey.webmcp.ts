@@ -44,7 +44,12 @@ type Json = Record<string, unknown>;
  */
 export interface ToolStep {
   /** The generated tool object, e.g. getAutocompleteTool. */
-  tool: { description?: string; inputSchema?: Json };
+  tool: {
+    description?: string;
+    inputSchema?: Json;
+    /** The generated tool's annotations. The step inherits readOnlyHint from it. */
+    annotations?: { readOnlyHint?: boolean };
+  };
   /**
    * The raw caller the generated file exports. Receives the step's input
    * plus the draft so far, so a later step can feed on an earlier one's
@@ -59,6 +64,12 @@ export interface ToolStep {
   description?: string;
   /** Override the agent-facing input schema. Default: the tool's own. */
   input?: Json;
+  /**
+   * Override the read-only hint. Default: the composed tool's own hint, so a
+   * step that composes a read stays read-only and a step that composes a
+   * write does not. Set this only when you know the step's behavior differs.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -71,6 +82,11 @@ export interface FreeStep {
   input: Json;
   provides: string[];
   run?: (input: Json, signal: AbortSignal | undefined, draft: Readonly<Json>) => Promise<Json>;
+  /**
+   * Override the read-only hint. Default: true when the step has no `run`
+   * (it only stores its input in the draft), false when `run` can do work.
+   */
+  readOnly?: boolean;
 }
 
 export type JourneyStep = ToolStep | FreeStep;
@@ -95,6 +111,30 @@ function isToolStep(step: JourneyStep): step is ToolStep {
   return "tool" in step;
 }
 
+/** Chrome's published budget for one tool description. */
+const TOOL_DESCRIPTION_MAX = 500;
+
+/** Fit machine-composed text to a budget, reserving room for the ellipsis. */
+function fitText(text: string, budget: number): string {
+  if (text.length <= budget) return text;
+  const slice = text.slice(0, Math.max(1, budget - 1));
+  const wordEnd = slice.lastIndexOf(" ");
+  return `${(wordEnd > 0 ? slice.slice(0, wordEnd) : slice).trimEnd()}…`;
+}
+
+/**
+ * Whether calling this step can change anything outside the draft. A step
+ * that composes a generated read tool inherits the tool's readOnlyHint; a
+ * free step that only stores input is a read; everything else defaults to
+ * "not read-only", because a step's `call`/`run` is user code we cannot
+ * inspect. We never advertise a write as safe just because it is a step.
+ */
+function stepReadOnly(step: JourneyStep): boolean {
+  if (step.readOnly !== undefined) return step.readOnly;
+  if (isToolStep(step)) return step.tool.annotations?.readOnlyHint === true;
+  return step.run === undefined;
+}
+
 /** "document-trip-search-places" → "Document Trip Search Places" (native UIs). */
 function toTitle(kebab: string): string {
   return kebab
@@ -105,8 +145,6 @@ function toTitle(kebab: string): string {
 }
 
 export function createJourney(def: JourneyDef) {
-  const modelContext = getModelContext();
-
   /** The shared draft. Page-scoped on purpose: reloads start clean. */
   let draft: Json = {};
 
@@ -122,7 +160,13 @@ export function createJourney(def: JourneyDef) {
   function stepDescription(step: JourneyStep): string {
     const base =
       step.description ?? (isToolStep(step) ? step.tool.description : undefined) ?? "Journey step.";
-    return `${base} Part of "${def.name}": ${def.goal}`;
+    const suffix = ` Part of "${def.name}": ${def.goal}`;
+    if (base.length + suffix.length <= TOOL_DESCRIPTION_MAX) return base + suffix;
+    // The step's own sentence matters more than repeating the whole goal.
+    // Keep the journey name (the grouping signal), drop the goal, and fit the
+    // base so the composed text never exceeds the budget.
+    const tag = ` Part of "${def.name}".`;
+    return `${fitText(base, TOOL_DESCRIPTION_MAX - tag.length)}${tag}`;
   }
 
   function stepInput(step: JourneyStep): Json {
@@ -143,6 +187,10 @@ export function createJourney(def: JourneyDef) {
   }
 
   async function registerSteps(signal?: AbortSignal): Promise<void> {
+    // Resolve the context here, not at createJourney() time: a browser or
+    // polyfill that installs WebMCP after this module loads must still get the
+    // journey registered. Generated tools look it up the same way.
+    const modelContext = getModelContext();
     if (!modelContext) return;
     for (const [key, step] of Object.entries(def.steps)) {
       await modelContext.registerTool(
@@ -151,7 +199,7 @@ export function createJourney(def: JourneyDef) {
           title: toTitle(`${def.name}-${key}`),
           description: stepDescription(step),
           inputSchema: stepInput(step),
-          annotations: { readOnlyHint: true },
+          annotations: { readOnlyHint: stepReadOnly(step) },
           execute: async (input, context) => {
             try {
               await runStep(step, input as Json, context?.signal);
@@ -172,6 +220,7 @@ export function createJourney(def: JourneyDef) {
   }
 
   async function registerSubmit(signal?: AbortSignal): Promise<void> {
+    const modelContext = getModelContext();
     if (!modelContext) return;
     await modelContext.registerTool(
       {
