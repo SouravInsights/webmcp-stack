@@ -1,9 +1,10 @@
+import { SITE_URL } from "@/lib/site-url";
 import { source } from "@/lib/source";
 
 /** Generated at build time, so it is a static file on the deployed site. */
 export const dynamic = "force-static";
 
-const BASE = "https://webmcp-stack.vercel.app";
+const BASE = SITE_URL;
 
 /**
  * The llms.txt index: a short, curated map of the docs for an agent to read

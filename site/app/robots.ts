@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/site-url";
 
-const BASE = "https://webmcp-stack.vercel.app";
+const BASE = SITE_URL;
 
 /**
  * Everything here is meant to be read, including by AI agents. The docs also
