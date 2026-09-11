@@ -25,6 +25,22 @@ The dashboard is for understanding, not decorating: every tool with its route,
 risk label, and findings. `verify` tells you where the surface is weak. Fix
 errors first; they block generation. Warnings can wait until the tool matters.
 
+A generated project looks like this. One file per tool, plus the shared runtime,
+the journey factory, and the barrel that registers everything:
+
+<Files>
+<Folder name="src/webmcp" defaultOpen>
+<File name="runtime.webmcp.ts" />
+<File name="journey.webmcp.ts" />
+<File name="index.ts" />
+<File name="list-trips.webmcp.ts" />
+<File name="create-trip.webmcp.ts" />
+<Folder name="journeys" defaultOpen>
+<File name="book-ride.webmcp.ts" />
+</Folder>
+</Folder>
+</Files>
+
 ## 2. Decide what agents may actually do
 
 Reads are registered so you can see the surface. Writes and destructive tools

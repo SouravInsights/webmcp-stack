@@ -67,8 +67,8 @@ export const bookRide = createJourney({
     "resolve-destination": {
       tool: geocodeAddressTool,
       call: (input, signal) => fetchGeocodeAddress(input as never, signal),
-      store: (place) => ({ destination: place }),
-      provides: ["destination"],
+      store: (place) => ({ destination: place }), // [!code highlight]
+      provides: ["destination"], // [!code highlight]
     },
 
     // A free step. No API call: the pickup time the agent passed in is
@@ -82,14 +82,15 @@ export const bookRide = createJourney({
         },
         required: ["pickupAt"],
       },
-      provides: ["pickupAt"],
+      provides: ["pickupAt"], // [!code highlight]
     },
   },
 
   submit: {
     description: "Request the ride and show the driver's details.",
-    build: (draft) => draft as RequestRideInput, // the draft becomes the tool's input
-    run: executeRequestRide, // the real write runs here, after the human confirms
+    // The draft becomes the real tool's input; the write runs after the human confirms.
+    build: (draft) => draft as RequestRideInput, // [!code highlight]
+    run: executeRequestRide,
   },
 });
 ```

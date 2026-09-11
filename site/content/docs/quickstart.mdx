@@ -37,9 +37,19 @@ npx @webmcp-stack/codegen generate --dry-run
 Generated files do nothing until your app registers them once at startup. The CLI does
 this edit for you:
 
-- **Next.js (app router):** creates `src/webmcp/register.tsx` (a small client component)
-  and adds an import plus `<WebMCPRegister />` to your root layout.
-- **Vite + React:** adds an import and one `registerAllTools()` call to `main.tsx`.
+<Tabs items={["Next.js (app router)", "Vite + React"]}>
+<Tab>
+
+Creates `src/webmcp/register.tsx`, a small client component, and adds an import plus
+`<WebMCPRegister />` to your root layout.
+
+</Tab>
+<Tab>
+
+Adds an import and one `registerAllTools()` call to `main.tsx`.
+
+</Tab>
+</Tabs>
 
 Edits are additive only, idempotent, and printed in the report with undo instructions. If
 the CLI can't find your entry file confidently, it prints the two lines instead of
