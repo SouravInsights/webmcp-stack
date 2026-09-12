@@ -1,6 +1,6 @@
 {
   "name": "@webmcp-stack/codegen",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Generate safe, typed, human-reviewed WebMCP tools from the API contracts you already have (OpenAPI, tRPC, Zod).",
   "license": "MIT",
   "type": "module",
