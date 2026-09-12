@@ -35,6 +35,8 @@ npx @webmcp-stack/codegen generate
 
 No install, no config for the first run. It detects your app, writes one `.webmcp.ts` file per tool, and adds the registration call to your entry file (additive edits, always reported; if it can't find the entry point, it prints the two lines for you to paste).
 
+It generates from the contract you maintain, not by scanning your app and guessing at intent. A vague spec or schema makes vague tools, so the source is the part worth getting right. If you have an OpenAPI spec or maintained schemas, this is built for you; if not, writing that contract is the first step, and the `schema` source lets you declare tools by hand in the meantime.
+
 ```bash
 npx @webmcp-stack/codegen dev      # local dashboard: browse, edit, toggle, and test tools
 npx @webmcp-stack/codegen verify   # check the tool set against the standard; exits 1 on errors

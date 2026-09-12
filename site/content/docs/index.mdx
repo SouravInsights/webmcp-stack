@@ -63,6 +63,10 @@ silent overwrite.
 
 Being clear about the edges is part of using it well:
 
+- It does not work without a contract you maintain. It generates from an
+  OpenAPI spec or the validation schemas your app already uses, not by scanning
+  your code, and a vague contract makes vague tools. This is on purpose. See
+  [Who this is for](/docs/why-agent-tools#who-this-is-for).
 - It does not decide your product's intents. That is your knowledge, or your
   agent's, guided by the skill file.
 - It does not make an unsafe API safe. Every tool calls your real endpoint, so

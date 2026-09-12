@@ -64,6 +64,18 @@ your validation schemas, into real TypeScript files in your repo:
 - It audits the result, in plain language, and `verify` fails CI when something
   is wrong.
 
+## Who this is for
+
+This tool generates from a contract you maintain: an OpenAPI spec, or the
+validation schemas your app already uses. If you have one, it turns that into a
+safe agent surface. If you do not, writing it is the work to do first.
+
+That is deliberate. It does not read your code and guess at intent, because a
+tool is only as good as the source behind it: a vague or stale contract makes
+vague or stale tools. A generator that claims to work on any codebase, by
+inferring meaning from source, tends to work well nowhere. We would rather do
+this one thing well.
+
 ## What it does not do
 
 Being clear about the edges is part of using it well:
