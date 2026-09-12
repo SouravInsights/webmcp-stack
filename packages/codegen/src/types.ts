@@ -3,7 +3,7 @@
  *
  * Every stage of the pipeline speaks in these types:
  *
- *   Source → CandidateTool → (safety review) → ReviewedTool → Output → GeneratedFile
+ *   Source -> CandidateTool -> (safety review) -> ReviewedTool -> Output -> GeneratedFile
  *
  * A source only has to produce CandidateTools. An output only has to turn
  * ReviewedTools into files. Everything in between lives here so the stages

@@ -111,7 +111,7 @@ describe("openapi source", () => {
     expect(tools.map((tool) => tool.name)).toEqual([
       "list-orders",
       "create-order",
-      "get-order", // no operationId → intent name from the route shape
+      "get-order", // no operationId -> intent name from the route shape
       "delete-order",
     ]);
   });

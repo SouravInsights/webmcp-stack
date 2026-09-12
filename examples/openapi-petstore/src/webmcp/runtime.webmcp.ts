@@ -13,10 +13,16 @@ export interface WebMcpToolResult {
 /** A tool as the browser runtime understands it. */
 export interface WebMcpToolDefinition {
   name: string;
+  /** A human-facing label for native UIs (the spec's USVString title). */
+  title?: string;
   description: string;
   inputSchema?: Record<string, unknown>;
   /** Hints the agent reads to decide how careful to be with this tool. */
-  annotations?: { readOnlyHint?: boolean; untrustedContentHint?: boolean };
+  annotations?: {
+    readOnlyHint?: boolean;
+    untrustedContentHint?: boolean;
+    consequentialHint?: boolean;
+  };
   execute: (
     input: Record<string, unknown>,
     context?: { signal?: AbortSignal },
@@ -27,7 +33,7 @@ export interface WebMcpToolDefinition {
 export interface ModelContext {
   registerTool(
     tool: WebMcpToolDefinition,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; exposedTo?: string[] },
   ): Promise<void>;
 }
 
@@ -50,6 +56,30 @@ export function getModelContext(): ModelContext | null {
     );
   }
   return modelContext ?? null;
+}
+
+/**
+ * Register every journey exported from the modules the barrel found in
+ * journeys/. Anything with a .register() method counts (createJourney's
+ * return shape); anything else is skipped quietly. One journey failing never
+ * takes the others down with it.
+ */
+export async function registerJourneys(
+  modules: Record<string, unknown>[],
+  signal?: AbortSignal,
+): Promise<void> {
+  for (const module of modules) {
+    for (const value of Object.values(module)) {
+      const journey = value as { register?: unknown } | null;
+      if (journey !== null && typeof journey === "object" && typeof journey.register === "function") {
+        try {
+          await (journey.register as (signal?: AbortSignal) => Promise<void>)(signal);
+        } catch (error) {
+          console.warn("[webmcp-codegen] a journey failed to register:", error);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -91,12 +121,27 @@ export async function callApi(
   }
 }
 
-/** Wrap a result in the MCP shape, so tool bodies stay one line. */
+/** Chrome's output budget: one tool result stays under ~1.5K characters. */
+const TOOL_OUTPUT_MAX = 1536;
+
+const TRUNCATED_NOTICE =
+  "\n... [truncated to fit the 1.5K output budget - return a smaller slice or paginate]";
+
+/**
+ * Wrap a result in the MCP shape, so tool bodies stay one line. The result
+ * text is capped at Chrome's ~1.5K per-call output budget: oversized payloads
+ * cost the agent context and can trip guardrails, so they are cut with a
+ * notice rather than delivered whole. The cap lives here in the shared
+ * runtime, so it cannot be edited away per tool.
+ */
 export function toolResult(data: unknown): WebMcpToolResult {
+  const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  const fitted =
+    text.length <= TOOL_OUTPUT_MAX
+      ? text
+      : text.slice(0, TOOL_OUTPUT_MAX - TRUNCATED_NOTICE.length) + TRUNCATED_NOTICE;
   return {
-    content: [
-      { type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) },
-    ],
+    content: [{ type: "text", text: fitted }],
   };
 }
 

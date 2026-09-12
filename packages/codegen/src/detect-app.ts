@@ -2,12 +2,12 @@
  * Web-app detection: where the generated tools should live.
  *
  * The tools are browser code, so they belong in whichever package *is* the
- * web app — not next to the spec, and not wherever the command happened to
+ * web app - not next to the spec, and not wherever the command happened to
  * run. In a monorepo like:
  *
  *   apps/
- *   ├── server/   (has the openapi.json)
- *   └── web/      (has next in its package.json)   ← tools go here
+ *   |-- server/   (has the openapi.json)
+ *   `-- web/      (has next in its package.json)   <- tools go here
  *
  * detection means reading package.json files and looking for a browser
  * framework. One candidate: we use it and say so. Several: the CLI asks

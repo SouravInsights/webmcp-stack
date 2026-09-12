@@ -207,7 +207,7 @@ describe("js generator", () => {
     // indentation preserved, so uncommenting restores working code.
     expect(tool?.contents).toContain("//       ...cancelOrderTool,");
     // The import reflects it: getModelContext is part of the fence, not the
-    // file — but callApi stays live, because the raw caller (fetchX) the
+    // file - but callApi stays live, because the raw caller (fetchX) the
     // generated region emits is live too: journeys compose withheld tools.
     expect(tool?.contents).toContain('import { callApi, toolDisabled } from "./runtime.webmcp";');
     expect(tool?.contents).toContain("export async function fetchCancelOrder(");
@@ -333,7 +333,7 @@ describe("js generator", () => {
     );
     const tool = files.find((file) => file.path.includes("cancel-order"));
     // Disabled notice first, the working call right below it, commented out
-    // — and it composes the generated region's raw caller like every other
+    // - and it composes the generated region's raw caller like every other
     // endpoint-backed tool.
     expect(tool?.contents).toContain('return toolDisabled("cancel-order.webmcp.ts");');
     expect(tool?.contents).toContain("// const data = await fetchCancelOrder(input, signal);");
@@ -377,7 +377,7 @@ describe("js generator", () => {
     );
 
     // The disabled tool's request is commented out, but its generated raw
-    // caller (fetchX) is live — so callApi is in the import line, and the
+    // caller (fetchX) is live - so callApi is in the import line, and the
     // enable instructions only name what's genuinely missing.
     const disabledWrite = files.find((file) => file.path.includes("cancel-order"));
     expect(disabledWrite?.contents).toContain(
@@ -535,7 +535,7 @@ describe("js generator", () => {
     await writeAll(
       await output.generate(
         [
-          reviewedTool(), // get-order-status → GET /orders/{id}
+          reviewedTool(), // get-order-status -> GET /orders/{id}
           reviewedTool({
             id: "DELETE /admin/orders/{id}",
             name: "delete-order",

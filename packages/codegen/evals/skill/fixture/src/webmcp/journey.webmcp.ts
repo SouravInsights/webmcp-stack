@@ -1,23 +1,23 @@
 /**
  * Written by webmcp-codegen on every `generate` run. Do not edit by hand;
- * your changes will be lost. This file is fully ours — journey definitions
+ * your changes will be lost. This file is fully ours - journey definitions
  * (your code) live in journeys/*.webmcp.ts and import createJourney from here.
  *
  * createJourney: multi-step agent flows with a shared draft and one submit.
  *
  * The three pieces, literally:
  *
- * 1. THE DRAFT — one plain object per page load (`let draft = {}` below).
+ * 1. THE DRAFT - one plain object per page load (`let draft = {}` below).
  *    Nothing fancier: steps write their results into it, the submit reads
  *    from it. It dies with the page; a half-finished journey does not
  *    survive a reload, which is what you want.
  *
- * 2. STEP TOOLS — ordinary registered WebMCP tools, one per step, named
+ * 2. STEP TOOLS - ordinary registered WebMCP tools, one per step, named
  *    "<journey>-<step>" (e.g. "document-trip-search-places"). A step's
  *    execute stores what it produced into the draft, then replies with what
  *    is still missing, so the agent always knows the next move.
  *
- * 3. THE SUBMIT GATE — one more registered tool, "<journey>-submit". Its
+ * 3. THE SUBMIT GATE - one more registered tool, "<journey>-submit". Its
  *    execute, in order: refuses with the list of missing steps, asks the
  *    human to confirm, runs the real tool's execute with the assembled
  *    input, clears the draft. There is no way to submit around it, because
@@ -37,7 +37,7 @@ type Json = Record<string, unknown>;
 
 /**
  * A step backed by an existing generated tool. The step inherits the tool's
- * description and input schema — the definition lives in one place — and
+ * description and input schema - the definition lives in one place - and
  * calls the raw caller the generated file exports (fetchGetAutocomplete,
  * not the agent-facing execute wrapper). You write only what's new: which
  * slice of the result lands in the draft.
@@ -73,7 +73,7 @@ export interface ToolStep {
 }
 
 /**
- * A step with no backend call of its own — it collects input into the draft
+ * A step with no backend call of its own - it collects input into the draft
  * ("set the title and dates"). With a `run`, it can do work first; whatever
  * `run` returns is stored. Without one, the input is stored verbatim.
  */
@@ -102,7 +102,7 @@ export interface JourneyDef {
     description: string;
     /** Assemble the real tool's input from the draft. This is your code. */
     build: (draft: Readonly<Json>) => unknown;
-    /** The existing tool's execute — your real endpoint runs here. */
+    /** The existing tool's execute - your real endpoint runs here. */
     run: (input: never, signal?: AbortSignal) => Promise<unknown>;
   };
 }
@@ -114,12 +114,15 @@ function isToolStep(step: JourneyStep): step is ToolStep {
 /** Chrome's published budget for one tool description. */
 const TOOL_DESCRIPTION_MAX = 500;
 
+/** The ASCII cut marker; fitText reserves its length before slicing. */
+const ELLIPSIS = "...";
+
 /** Fit machine-composed text to a budget, reserving room for the ellipsis. */
 function fitText(text: string, budget: number): string {
   if (text.length <= budget) return text;
-  const slice = text.slice(0, Math.max(1, budget - 1));
+  const slice = text.slice(0, Math.max(ELLIPSIS.length, budget - ELLIPSIS.length));
   const wordEnd = slice.lastIndexOf(" ");
-  return `${(wordEnd > 0 ? slice.slice(0, wordEnd) : slice).trimEnd()}…`;
+  return `${(wordEnd > 0 ? slice.slice(0, wordEnd) : slice).trimEnd()}${ELLIPSIS}`;
 }
 
 /**
@@ -135,7 +138,7 @@ function stepReadOnly(step: JourneyStep): boolean {
   return step.run === undefined;
 }
 
-/** "document-trip-search-places" → "Document Trip Search Places" (native UIs). */
+/** "document-trip-search-places" -> "Document Trip Search Places" (native UIs). */
 function toTitle(kebab: string): string {
   return kebab
     .split("-")
@@ -206,7 +209,7 @@ export function createJourney(def: JourneyDef) {
               const left = missing();
               return toolResult(
                 left.length === 0
-                  ? `Stored. The journey is ready — call ${def.name}-submit.`
+                  ? `Stored. The journey is ready - call ${def.name}-submit.`
                   : `Stored. Still needed: ${left.join(", ")}.`,
               );
             } catch (error) {
@@ -258,7 +261,7 @@ export function createJourney(def: JourneyDef) {
       await registerSteps(signal);
       await registerSubmit(signal);
     },
-    /** What's in the draft right now — for the dashboard and for tests. */
+    /** What's in the draft right now - for the dashboard and for tests. */
     inspectDraft: (): Json => ({ ...draft }),
   };
 }

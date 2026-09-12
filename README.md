@@ -59,7 +59,7 @@ You can, and it works. What you get back is different every time, and nothing ch
 A real tool from a real app: `create-trip`, one of 70+ tools generated for [beenthere.page](https://beenthere.page) from its OpenAPI spec, shortened for the README:
 
 ```ts
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * Create a new trip. Returns the trip.
  * Source: POST /v1/trips/ (openapi). Risk: write-confirm.
@@ -89,7 +89,7 @@ export async function fetchCreateTrip(input: CreateTripInput, signal?: AbortSign
 //   const confirmed = await requestUserConfirmation(
 //     "Allow the agent to: Create a new trip. Returns the trip.",
 //   );
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 export async function executeCreateTrip(input: CreateTripInput, signal?: AbortSignal) {
   return toolDisabled("create-trip.webmcp.ts");

@@ -1,6 +1,6 @@
-import { toolDisabled } from "./runtime.webmcp";
+import { callApi, toolDisabled } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * Remove a pet from the store permanently
  *
@@ -15,7 +15,7 @@ export const deletePetInputSchema = {
   "properties": {
     "id": {
       "type": "string",
-      "description": "Id."
+      "description": "The unique identifier of the pet."
     }
   },
   "required": [
@@ -32,13 +32,22 @@ export const deletePetHints = {"readOnlyHint":false,"destructiveHint":true,"idem
 /** The tool definition, minus `execute` (which is yours, below the marker). */
 export const deletePetTool = {
   name: "delete-pet",
+  title: "Delete Pet",
   description: "Remove a pet from the store permanently",
   inputSchema: deletePetInputSchema,
   annotations: {
     readOnlyHint: false,
     untrustedContentHint: false,
+    consequentialHint: true,
   },
 };
+
+/** The bare request, without the agent-facing result wrapping. Journeys
+ * and your own code compose this; executeDeletePet is the agent-facing one. */
+export async function fetchDeletePet(input: DeletePetInput, signal?: AbortSignal) {
+  const data = await callApi(`/pets/${input.id}`, { method: "DELETE", signal });
+  return data;
+}
 
 /**
  * Withheld: this tool is not registered, so agents cannot see or pick
@@ -80,7 +89,7 @@ export async function registerDeletePet(signal?: AbortSignal): Promise<void> {
   //   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "delete-pet".

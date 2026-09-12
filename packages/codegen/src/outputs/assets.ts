@@ -2,11 +2,11 @@
  * Read a bundled asset (the skill file, the journey helper).
  *
  * These ship as files in the published package rather than as template
- * strings in source because they are also the reviewable artifacts — the
+ * strings in source because they are also the reviewable artifacts - the
  * design docs and the docs site point at assets/ directly, and two sources
  * of truth would drift. The package publishes dist + assets; the two
- * candidate roots cover the built layout (dist/x.js → ../assets) and the
- * source tree under test (src/outputs/x.ts → ../../assets).
+ * candidate roots cover the built layout (dist/x.js -> ../assets) and the
+ * source tree under test (src/outputs/x.ts -> ../../assets).
  */
 
 import { readFile } from "node:fs/promises";

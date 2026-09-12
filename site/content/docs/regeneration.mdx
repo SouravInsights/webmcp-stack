@@ -20,12 +20,12 @@ to be re-run every time your API changes.
 Each tool file has two regions, split by a marker comment:
 
 ```ts title="src/webmcp/delete-pet.webmcp.ts"
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 
 //   name, description, input schema, input type, hints, register()
 //   ... everything derived from the API contract
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 export async function executeDeletePet(input: DeletePetInput) {
   // This tool is withheld: nothing registers it, so agents cannot see or call it.

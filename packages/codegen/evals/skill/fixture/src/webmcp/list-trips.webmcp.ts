@@ -1,6 +1,6 @@
 import { getModelContext, callApi, toolResult, asToolError } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * List the signed-in user's trips. Returns an array of trips.
  *
@@ -69,7 +69,7 @@ export async function registerListTrips(signal?: AbortSignal): Promise<void> {
   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "list-trips".

@@ -27,16 +27,16 @@ describe("fitBudget", () => {
     const text = `${"a b c d e f g h i j k l m n o p q r s t u v w x y z ".repeat(6)}end`;
     const fitted = fitBudget(text, 150);
     expect(fitted.length).toBeLessThanOrEqual(150);
-    expect(fitted.endsWith("…")).toBe(true);
+    expect(fitted.endsWith("...")).toBe(true);
     expect(fitted).not.toContain("end");
   });
 
   it("never exceeds the budget for a single unbroken token", () => {
     // The regression that started this: a URL or token with no spaces used to
-    // come back at budget + 1 because the ellipsis was appended after the cut.
+    // come back over budget because the cut marker was appended after the cut.
     const fitted = fitBudget("x".repeat(300), 150);
     expect(fitted.length).toBeLessThanOrEqual(150);
-    expect(fitted.endsWith("…")).toBe(true);
+    expect(fitted.endsWith("...")).toBe(true);
   });
 });
 

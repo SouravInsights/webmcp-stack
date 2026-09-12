@@ -43,7 +43,7 @@ describe("verify description budgets", () => {
     ]);
     const budgets = checks.find((check) => check.area === "Budgets");
     expect(budgets?.level).toBe("warning");
-    expect(budgets?.findings[0]).toContain("get-order-status → notes");
+    expect(budgets?.findings[0]).toContain("get-order-status -> notes");
     expect(budgets?.findings[0]).toContain("150");
   });
 

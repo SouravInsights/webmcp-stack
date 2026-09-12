@@ -55,7 +55,7 @@ import {
 import { applyWiring, planWiring, type WirePlan } from "./wire.js";
 
 const HELP = `
-webmcp-codegen — generate WebMCP tools from your OpenAPI spec
+webmcp-codegen - generate WebMCP tools from your OpenAPI spec
 
 Usage
   npx @webmcp-stack/codegen [command] [flags]
@@ -313,7 +313,7 @@ async function dev(port: number): Promise<number> {
 /**
  * The tool standard, measured locally: runs the pipeline exactly as generate
  * would (nothing written), then reports how the registered surface holds up
- * — names, descriptions, field text, annotations, surface size. Exits 1 on
+ * - names, descriptions, field text, annotations, surface size. Exits 1 on
  * error-level findings so CI can gate on it.
  */
 async function verify(flags: CliFlags): Promise<number> {
@@ -341,7 +341,7 @@ async function verify(flags: CliFlags): Promise<number> {
   const registered = result.tools.filter((tool) => !tool.withheld);
 
   // Journey files are the user's code, so verify can't get them from the
-  // pipeline's tool list — it reads the journeys/ folder of each tools
+  // pipeline's tool list - it reads the journeys/ folder of each tools
   // output itself and lints what it finds there. Read them first: the surface
   // count needs to include the tools they register at runtime.
   const journeyInputs: JourneyFileInput[] = [];
@@ -370,13 +370,13 @@ async function verify(flags: CliFlags): Promise<number> {
   info(`  ${setup.label}: ${result.tools.length} tools, ${registered.length} registered`);
   info("");
   for (const check of checks) {
-    const mark = check.level === "ok" ? "✓" : check.level === "error" ? "✖" : "!";
+    const mark = check.level === "ok" ? "ok" : check.level === "error" ? "x" : "!";
     info(`  ${mark} ${check.area}: ${check.summary}`);
     for (const finding of check.findings.slice(0, 8)) {
       info(`      ${finding}`);
     }
     if (check.findings.length > 8) {
-      info(dim(`      …and ${check.findings.length - 8} more`));
+      info(dim(`      ...and ${check.findings.length - 8} more`));
     }
   }
 
@@ -388,7 +388,7 @@ async function verify(flags: CliFlags): Promise<number> {
       info(`  ! ${finding.message}`);
     }
     if (pageFindings.length === 0) {
-      info("  ✓ Page checks passed");
+      info("  ok Page checks passed");
     }
   }
 
@@ -425,7 +425,7 @@ async function generate(flags: CliFlags): Promise<number> {
   const progress = flags.verbose ? (msg: string) => debug(msg) : undefined;
 
   // The data file carries the developer's dashboard edits and the last run's
-  // names. Both must reach the pipeline here — the dashboard is where edits
+  // names. Both must reach the pipeline here - the dashboard is where edits
   // are made, but this command is where files are written, and an edit that
   // only one of them reads does not survive.
   const data = await loadDataFile(cwd);
@@ -441,7 +441,7 @@ async function generate(flags: CliFlags): Promise<number> {
   });
 
   if (!flags.verbose && result.tools.length > 0) {
-    info(`  → Read ${result.tools.length + result.skipped.length} operations`);
+    info(`  -> Read ${result.tools.length + result.skipped.length} operations`);
   }
 
   // Audit errors block the write. Instead of requiring --force on a re-run,

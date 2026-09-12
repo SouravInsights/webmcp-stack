@@ -21,8 +21,8 @@
  *
  * Threading (how the merged call feeds the second request from the first
  * response) is exact-name only: the right side's path params must each match
- * a property on the left's response schema (`{uploadId}` ← `uploadId`). If a
- * path param can't be threaded, the pair is skipped — guessing data flow is
+ * a property on the left's response schema (`{uploadId}` <- `uploadId`). If a
+ * path param can't be threaded, the pair is skipped - guessing data flow is
  * how plausible garbage gets shipped.
  *
  * The merged tool is withheld like any write: the merge is a proposal the
@@ -162,7 +162,7 @@ export function groupHandshakes(candidates: CandidateTool[]): GroupResult {
     const threaded = threadingFor(left, right);
     if (threaded === undefined) {
       notes.push(
-        `${left.name} + ${right.name} look like one flow, but "${right.name}" takes path params the first response doesn't provide — left as separate tools.`,
+        `${left.name} + ${right.name} look like one flow, but "${right.name}" takes path params the first response doesn't provide - left as separate tools.`,
       );
       continue;
     }
@@ -170,7 +170,7 @@ export function groupHandshakes(candidates: CandidateTool[]): GroupResult {
     const name = pickMergedName(noun, resource, taken);
     if (!name) {
       notes.push(
-        `${left.name} + ${right.name} look like one flow, but every merged name collided — left as separate tools.`,
+        `${left.name} + ${right.name} look like one flow, but every merged name collided - left as separate tools.`,
       );
       continue;
     }
@@ -208,7 +208,7 @@ export function groupHandshakes(candidates: CandidateTool[]): GroupResult {
       },
     });
     notes.push(
-      `Grouped ${left.name} + ${right.name} into ${name} — one action the API split in two calls. It starts withheld like its members; enable ${name} instead of the pair when you're satisfied.`,
+      `Grouped ${left.name} + ${right.name} into ${name} - one action the API split in two calls. It starts withheld like its members; enable ${name} instead of the pair when you're satisfied.`,
     );
   }
 

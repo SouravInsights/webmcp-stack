@@ -1,6 +1,6 @@
 import { getModelContext, callApi, toolResult, asToolError } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * Search places by free text. Returns an array of autocomplete.
  *
@@ -76,7 +76,7 @@ export async function registerGetAutocomplete(signal?: AbortSignal): Promise<voi
   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "get-autocomplete".

@@ -39,6 +39,9 @@ import type { CandidateTool, JsonSchema } from "./types.js";
 export const TOOL_DESCRIPTION_MAX = 500;
 export const FIELD_DESCRIPTION_MAX = 150;
 
+/** The ASCII cut marker; fit functions reserve its length before slicing. */
+const ELLIPSIS = "...";
+
 /**
  * Fit machine-drafted text to a character budget. A text that fits passes
  * through untouched. One that overflows is cut at the last sentence boundary
@@ -52,9 +55,9 @@ export const FIELD_DESCRIPTION_MAX = 150;
  */
 export function fitBudget(text: string, budget: number): string {
   if (text.length <= budget) return text;
-  // Leave one character for the ellipsis, so the result can never be
-  // budget + 1 when there is no space to cut at.
-  const slice = text.slice(0, budget - 1);
+  // Reserve room for the cut marker, so the result can never come back over
+  // budget when there is no space to cut at.
+  const slice = text.slice(0, budget - ELLIPSIS.length);
   const sentenceEnd = Math.max(
     slice.lastIndexOf(". "),
     slice.lastIndexOf("! "),
@@ -63,7 +66,7 @@ export function fitBudget(text: string, budget: number): string {
   if (sentenceEnd >= Math.floor(budget / 2)) return slice.slice(0, sentenceEnd + 1);
   const wordEnd = slice.lastIndexOf(" ");
   const body = wordEnd > 0 ? slice.slice(0, wordEnd) : slice;
-  return `${body.trimEnd()}…`;
+  return `${body.trimEnd()}${ELLIPSIS}`;
 }
 
 /**
@@ -192,7 +195,7 @@ function alreadyStatesConstraints(text: string, schema: JsonSchema): boolean {
   return values.length > 0 && values.every((value) => text.includes(value));
 }
 
-/** "purchaseDate" / "purchase_date" / "purchase-date" → "Purchase date".
+/** "purchaseDate" / "purchase_date" / "purchase-date" -> "Purchase date".
  *  Sentence case, matching the field text in Chrome's WebMCP examples; these
  *  are machine drafts that the audit flags, not final copy. */
 function humanizeFieldName(name: string): string {
@@ -230,7 +233,7 @@ function patternSentence(name: string, schema: JsonSchema, noun?: string): strin
   if (last === "url" && subject) return `The URL of the ${subject}.`;
   if (last === "at" && words.length > 1) {
     // The stem's last word is the event ("captured"); anything before it is
-    // what it happened to ("email verified at" → the email).
+    // what it happened to ("email verified at" -> the email).
     const happenedTo = words.slice(0, -2).join(" ") || noun;
     if (happenedTo) return `When the ${happenedTo} was ${words[words.length - 2]}.`;
   }
@@ -243,7 +246,7 @@ function patternSentence(name: string, schema: JsonSchema, noun?: string): strin
 }
 
 /**
- * The noun a tool acts on, from its name: "create-trip" → "trip". Our own
+ * The noun a tool acts on, from its name: "create-trip" -> "trip". Our own
  * naming rules put the verb first, so the next segment that means something
  * is the noun. Only a fallback subject for pattern sentences.
  */
@@ -434,7 +437,7 @@ const PHRASAL_VERBS = new Set(["sign-up", "sign-in", "sign-out", "log-in", "log-
 
 function returnShapeSentence(toolName: string, output: JsonSchema): string {
   const words = toolName.split("-");
-  // The noun is what the verb leaves behind — and a phrasal verb is two words.
+  // The noun is what the verb leaves behind - and a phrasal verb is two words.
   const firstTwo = words.slice(0, 2).join("-");
   const nounWords = PHRASAL_VERBS.has(firstTwo) ? words.slice(2) : words.slice(1);
   const nounPhrase = nounWords.join(" ").replace(/ by \w+$/, "");

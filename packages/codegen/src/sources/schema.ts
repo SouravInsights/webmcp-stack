@@ -69,7 +69,7 @@ function isStandardSchema(value: unknown): value is StandardSchemaV1 {
 /**
  * TypeBox v1 schemas are JSON Schema documents, not wrapper objects: the value
  * has `type` and `properties` and no `~standard`. This is the only check that
- * does not lie about what TypeBox is — there is no vendor marker to read.
+ * does not lie about what TypeBox is - there is no vendor marker to read.
  */
 function isTypeBoxSchema(value: unknown): value is JsonSchema {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -159,7 +159,7 @@ function toJsonSchema(
   anchorDir: string,
 ): JsonSchema {
   // TypeBox schemas are JSON Schema already: `Type.Object({...})` returns the
-  // draft-2020-12 shape with no wrapper. Detected by shape, not a marker —
+  // draft-2020-12 shape with no wrapper. Detected by shape, not a marker -
   // TypeBox v1 has no `~standard` and no `_def`; the object is the contract.
   if (isTypeBoxSchema(value)) {
     return value;

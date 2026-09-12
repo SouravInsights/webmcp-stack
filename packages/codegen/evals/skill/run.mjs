@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * The skill-file eval runner: prompt → captured run → checks → score.
+ * The skill-file eval runner: prompt -> captured run -> checks -> score.
  *
  * Each case gets a fresh copy of fixture/ (plus the skill file, unless the
  * case removes it), an agent runs the case's prompt inside it headlessly,
- * and deterministic checks grade what the agent left behind — files, not
+ * and deterministic checks grade what the agent left behind - files, not
  * transcripts, wherever possible. Behavior is nondeterministic: run trials
  * and report pass RATES, never a single run's verdict.
  *
@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, "fixture");
 const GENERATED_END =
-  "// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───";
+  "// --- webmcp-codegen: end generated. Your code below survives regeneration. ---";
 
 // ---------------------------------------------------------------- graders
 // Every grader: async (ctx) => null on pass, or a sentence on failure.
@@ -95,7 +95,7 @@ const graders = {
     };
     return headOf(after) === headOf(before)
       ? null
-      : `${check.path}: the generated region was edited — regeneration will clobber it; descriptions and names move through .webmcp-codegen.json`;
+      : `${check.path}: the generated region was edited - regeneration will clobber it; descriptions and names move through .webmcp-codegen.json`;
   },
 
   /** Nothing under src/webmcp may differ from the fixture (negative cases). */
@@ -226,7 +226,7 @@ async function runCase(caseDef, command, trials, report) {
     results,
   });
   console.log(
-    `  ${gate === true ? "✓" : gate === "informational" ? "ℹ" : "✖"} ${caseDef.id}: ${passed}/${results.length} passed${caseDef.kind === "control" ? " (control)" : ""}`,
+    `  ${gate === true ? "ok" : gate === "informational" ? "i" : "x"} ${caseDef.id}: ${passed}/${results.length} passed${caseDef.kind === "control" ? " (control)" : ""}`,
   );
   for (const result of results.filter((r) => !r.pass)) {
     for (const line of result.failures) console.log(`      trial ${result.trial + 1}: ${line}`);
@@ -252,7 +252,7 @@ async function selftest() {
       });
       const gotFail = failure !== null;
       console.log(
-        `  ${gotFail === expectFail ? "✓" : "✖"} ${label}${gotFail && expectFail ? ` (${failure})` : ""}`,
+        `  ${gotFail === expectFail ? "ok" : "x"} ${label}${gotFail && expectFail ? ` (${failure})` : ""}`,
       );
       await rm(dir, { recursive: true, force: true });
       return gotFail === expectFail;
@@ -384,7 +384,7 @@ async function main() {
   const gated = report.cases.filter((c) => c.kind !== "control");
   const allPassed = gated.every((c) => c.gate === true);
   console.log(
-    `\n  ${gated.filter((c) => c.gate === true).length}/${gated.length} gated cases fully passing — report: ${relative(process.cwd(), outPath)}`,
+    `\n  ${gated.filter((c) => c.gate === true).length}/${gated.length} gated cases fully passing - report: ${relative(process.cwd(), outPath)}`,
   );
   process.exit(allPassed ? 0 : 1);
 }

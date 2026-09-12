@@ -72,7 +72,7 @@ Working with a literal `<form>` instead? The `form` output annotates it in place
 
 ## Safety is part of generation
 
-This is not a dumb API → WebMCP converter. Giving agents access to application actions is a new security surface, so the generator analyzes what every endpoint actually is: read-only, write, destructive, auth-boundary, or sensitive/PII-related. Every tool gets a safety classification and WebMCP hints, the audit pass runs inside `generate` (errors block, exit codes for CI), and higher-risk tools are generated disabled so you explicitly decide what agents can touch. The goal is that you stay in control of the agent-facing surface instead of blindly exposing every endpoint.
+This is not a dumb API -> WebMCP converter. Giving agents access to application actions is a new security surface, so the generator analyzes what every endpoint actually is: read-only, write, destructive, auth-boundary, or sensitive/PII-related. Every tool gets a safety classification and WebMCP hints, the audit pass runs inside `generate` (errors block, exit codes for CI), and higher-risk tools are generated disabled so you explicitly decide what agents can touch. The goal is that you stay in control of the agent-facing surface instead of blindly exposing every endpoint.
 
 ## The dashboard
 
@@ -87,13 +87,13 @@ A local control panel for your WebMCP surface, the way Scalar is for APIs or Sto
 One file per endpoint, like `delete-pet.webmcp.ts`:
 
 ```ts
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 export const deletePetInputSchema = { /* derived from your spec */ };
 export type DeletePetInput = { id: string };
 export async function registerDeletePet(signal?: AbortSignal) {
   // Registers the tool; mutations ask the user to confirm, always.
 }
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 export async function executeDeletePet(input: DeletePetInput) {
   // This tool starts disabled: it changes things. To enable it, delete the
@@ -148,8 +148,8 @@ export default defineConfig({
 
 ## Requirements
 
-- Node.js ≥ 20
-- To *use* the generated tools in a browser: enable `chrome://flags/#enable-webmcp-testing` for local development (Chrome 149+, Edge 150+); production pages join the WebMCP origin trial — or use the WebMCP polyfill
+- Node.js 20 or newer
+- To *use* the generated tools in a browser: enable `chrome://flags/#enable-webmcp-testing` for local development (Chrome 149+, Edge 150+); production pages join the WebMCP origin trial - or use the WebMCP polyfill
 
 ## License
 

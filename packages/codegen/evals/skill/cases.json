@@ -52,7 +52,7 @@
     {
       "id": "improve-description",
       "kind": "core",
-      "comment": "Descriptions live in the generated region (do-not-edit) or the overrides file — the skill teaches overrides, so the marker must survive either way.",
+      "comment": "Descriptions live in the generated region (do-not-edit) or the overrides file - the skill teaches overrides, so the marker must survive either way.",
       "prompt": "The create-trip description doesn't tell agents what comes back. Improve it.",
       "checks": [
         {

@@ -1,7 +1,7 @@
 /**
  * The remembered-choices file: `.webmcp-codegen.json` at the project root.
  *
- * It is plain data — never code — so it works in the pure-npx flow (no
+ * It is plain data - never code - so it works in the pure-npx flow (no
  * install needed) and can be read and written safely by the CLI and the dev
  * dashboard alike. It holds two kinds of things:
  *

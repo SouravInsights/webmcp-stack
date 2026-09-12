@@ -1,6 +1,6 @@
 import { getModelContext, callApi, toolResult, asToolError } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * Get one pet, including its owner's contact details. Returns the pet.
  *
@@ -15,7 +15,7 @@ export const getPetInputSchema = {
   "properties": {
     "id": {
       "type": "string",
-      "description": "Id."
+      "description": "The unique identifier of the pet."
     }
   },
   "required": [
@@ -32,13 +32,22 @@ export const getPetHints = {"readOnlyHint":true,"destructiveHint":false,"idempot
 /** The tool definition, minus `execute` (which is yours, below the marker). */
 export const getPetTool = {
   name: "get-pet",
+  title: "Get Pet",
   description: "Get one pet, including its owner's contact details. Returns the pet.",
   inputSchema: getPetInputSchema,
   annotations: {
     readOnlyHint: true,
     untrustedContentHint: true,
+    consequentialHint: false,
   },
 };
+
+/** The bare request, without the agent-facing result wrapping. Journeys
+ * and your own code compose this; executeGetPet is the agent-facing one. */
+export async function fetchGetPet(input: GetPetInput, signal?: AbortSignal) {
+  const data = await callApi(`/pets/${input.id}`, { method: "GET", signal });
+  return data;
+}
 
 /**
  * Register this tool with WebMCP. Call it once on page load, or use
@@ -67,7 +76,7 @@ export async function registerGetPet(signal?: AbortSignal): Promise<void> {
   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "get-pet".
@@ -77,7 +86,7 @@ export async function registerGetPet(signal?: AbortSignal): Promise<void> {
  * whenever you like; the contract above never changes.
  */
 //
-// ⚠ webmcp-codegen flagged these response fields as likely PII: owner.email.
+// ! webmcp-codegen flagged these response fields as likely PII: owner.email.
 // Everything you return reaches the agent. Leave those fields out of what you
 // return unless the agent genuinely needs them, and say so in a comment if you keep them.
 export async function executeGetPet(input: GetPetInput) {

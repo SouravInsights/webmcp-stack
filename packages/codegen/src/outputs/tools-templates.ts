@@ -281,7 +281,7 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
   if (tool.piiInOutput.length > 0) {
     lines.push(
       `//`,
-      `// ⚠ webmcp-codegen flagged these response fields as likely PII: ${tool.piiInOutput.join(", ")}.`,
+      `// ! webmcp-codegen flagged these response fields as likely PII: ${tool.piiInOutput.join(", ")}.`,
       `// Everything you return reaches the agent. Leave those fields out of what you`,
       `// return unless the agent genuinely needs them, and say so in a comment if you keep them.`,
     );
@@ -343,7 +343,7 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
  * knows: the path template becomes a template literal, query params become
  * the search string, body fields become the JSON body.
  *
- *   "/pets/{id}" + DELETE  →  const data = await callApi(`/pets/${input.id}`, { method: "DELETE" });
+ *   "/pets/{id}" + DELETE  ->  const data = await callApi(`/pets/${input.id}`, { method: "DELETE" });
  *
  * When the source carries no route information, we fall back to an honest
  * TODO instead of inventing a URL.
@@ -353,7 +353,7 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
  * is frequently a local dev URL (http://localhost:3001); baking that into the
  * generated fetch makes every deployed tool call the visitor's own machine.
  * So: a non-local absolute URL is kept (the API genuinely lives elsewhere),
- * a local one returns undefined so the tool falls back to same-origin —
+ * a local one returns undefined so the tool falls back to same-origin -
  * which is where a deployed app's API actually is.
  */
 export function resolveApiBase(serverUrl: string | undefined): string | undefined {
@@ -372,7 +372,7 @@ export function resolveApiBase(serverUrl: string | undefined): string | undefine
 /**
  * The arguments to one callApi(...): the path expression (template params
  * interpolated, non-local server URLs kept) plus method/query/body/signal.
- * `pathRef` says where each path param's value comes from — ordinary tools
+ * `pathRef` says where each path param's value comes from - ordinary tools
  * read `input`, the second call of a composed tool reads the first result.
  */
 function buildCallExpr(options: {
@@ -395,7 +395,7 @@ function buildCallExpr(options: {
   const queryParams = queryParamsAll.filter((name) => !skipFields.has(name));
   const bodyParams = bodyParamsAll.filter((name) => !skipFields.has(name));
 
-  // "/pets/{id}" → `/pets/${input.id}`. Params the schema knows by name.
+  // "/pets/{id}" -> `/pets/${input.id}`. Params the schema knows by name.
   let pathExpr = `\`${pathTemplate.replace(/\{([^}]+)\}/g, (_m, param: string) => `\${${pathRef(param)}}`)}\``;
   if (pathParams.length === 0) pathExpr = JSON.stringify(pathTemplate);
 
@@ -453,7 +453,7 @@ function firstResultRef(param: string): string {
  * The two calls of a grouped handshake tool: the first request runs, its
  * response fields fill the second request's path params by exact name, and
  * the second response is the tool's result. Threaded fields never reach the
- * agent-facing input — that's the point of the composition.
+ * agent-facing input - that's the point of the composition.
  */
 function composedFetchBody(plan: NonNullable<ReviewedTool["compose"]>): string[] {
   const threaded = new Set(Object.keys(plan.threaded));
@@ -616,7 +616,7 @@ export async function callApi(
 const TOOL_OUTPUT_MAX = 1536;
 
 const TRUNCATED_NOTICE =
-  "\\n… [truncated to fit the 1.5K output budget — return a smaller slice or paginate]";
+  "\\n... [truncated to fit the 1.5K output budget - return a smaller slice or paginate]";
 
 /**
  * Wrap a result in the MCP shape, so tool bodies stay one line. The result
@@ -735,9 +735,9 @@ export async function registerAllTools(signal?: AbortSignal): Promise<void> {
 `;
 }
 
-/** "GetOrderStatus" → "getOrderStatus" (for the generated const names). */
+/** "GetOrderStatus" -> "getOrderStatus" (for the generated const names). */
 /**
- * The spec's human-facing `title`: "list-trips" → "List Trips". Derived from
+ * The spec's human-facing `title`: "list-trips" -> "List Trips". Derived from
  * the name so the two never disagree.
  */
 function titleFromName(name: string): string {

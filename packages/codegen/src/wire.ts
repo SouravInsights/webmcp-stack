@@ -3,7 +3,7 @@
  *
  * Generated files do nothing until something calls registerAllTools() once at
  * startup. Rather than telling the developer to go do that, we do it for
- * them — under strict rules, because this is the one place we edit *their*
+ * them - under strict rules, because this is the one place we edit *their*
  * files instead of ours:
  *
  *   1. Edits are additive only. We insert lines; we never change or remove
@@ -67,16 +67,16 @@ export async function applyWiring(plan: WirePlan): Promise<void> {
   }
 }
 
-/* ── Next.js (app router) ──────────────────────────────────────────────── */
+/* -- Next.js (app router) ------------------------------------------------ */
 
 /**
  * Next needs the registration to run on the client, so we generate a tiny
  * "use client" component next to the tools and mount it in the root layout:
  *
- *   import { WebMCPRegister } from "../webmcp/register";   ← added
+ *   import { WebMCPRegister } from "../webmcp/register";   <- added
  *   ...
  *   <body>
- *     <WebMCPRegister />                                    ← added
+ *     <WebMCPRegister />                                    <- added
  *     {children}
  */
 async function planNextWiring(cwd: string, app: WebApp, outDir: string): Promise<WirePlan | null> {
@@ -92,7 +92,7 @@ async function planNextWiring(cwd: string, app: WebApp, outDir: string): Promise
   const registerPath = join(cwd, outDir, "register.tsx");
   const layout = await readFile(layoutPath, "utf8");
   if (layout.includes("WebMCPRegister")) {
-    // The layout mounts the component — but "wired" also means the file it
+    // The layout mounts the component - but "wired" also means the file it
     // points at exists. A deleted register.tsx (or a fresh clone where it
     // was never committed) must not leave the app broken.
     try {
@@ -165,13 +165,13 @@ export function WebMCPRegister() {
 `;
 }
 
-/* ── Vite + React (SPAs) ───────────────────────────────────────────────── */
+/* -- Vite + React (SPAs) ------------------------------------------------- */
 
 /**
  * A Vite app boots in main.tsx, so wiring is two added lines there:
  *
- *   import { registerAllTools } from "./webmcp";   ← added
- *   void registerAllTools();                        ← added
+ *   import { registerAllTools } from "./webmcp";   <- added
+ *   void registerAllTools();                        <- added
  */
 async function planViteWiring(cwd: string, app: WebApp, outDir: string): Promise<WirePlan | null> {
   const entryCandidates = [
@@ -205,7 +205,7 @@ async function planViteWiring(cwd: string, app: WebApp, outDir: string): Promise
   };
 }
 
-/* ── Shared helpers ────────────────────────────────────────────────────── */
+/* -- Shared helpers ------------------------------------------------------ */
 
 /** Insert a line after the file's last top-level import statement. */
 function insertAfterLastImport(source: string, line: string): string | null {
@@ -221,7 +221,7 @@ function insertAfterLastImport(source: string, line: string): string | null {
 
 /**
  * Turn a filesystem path into a JS import specifier: no extension, and an
- * explicit "./" when the target is in the same directory or deeper —
+ * explicit "./" when the target is in the same directory or deeper -
  * `relative()` alone yields "webmcp/index", which JS would read as a
  * package name, not a file.
  */

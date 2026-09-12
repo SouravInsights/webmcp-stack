@@ -1,5 +1,5 @@
 /**
- * The pipeline: sources → normalize → safety review → audit → write.
+ * The pipeline: sources -> normalize -> safety review -> audit -> write.
  *
  * This module is the only place the stages meet. It owns no opinions of its
  * own; naming, safety, and file formats all live in their own modules. It
@@ -40,7 +40,7 @@ export interface GenerateOptions {
    */
   overrides?: ToolOverrides;
   /**
-   * The names the last run produced (name → route ref), from the same file.
+   * The names the last run produced (name -> route ref), from the same file.
    * When a route's name changes between runs, the rename is reported and the
    * tool's overrides move with it: a rename is a report line, never a silent
    * break.
@@ -58,9 +58,9 @@ export interface GenerateResult {
   files: GeneratedFile[];
   /** Human-facing pipeline notes, e.g. "stripped the shared v1 prefix". */
   notes: string[];
-  /** Names that changed since the last run (old → new), overrides re-keyed. */
+  /** Names that changed since the last run (old -> new), overrides re-keyed. */
   crossRenames: { from: string; to: string }[];
-  /** The names this run produced (name → route ref), for the caller to save. */
+  /** The names this run produced (name -> route ref), for the caller to save. */
   namesLedger: Record<string, string>;
   /** Overrides with renamed tools re-keyed, when a rename moved any. */
   migratedOverrides?: ToolOverrides;
@@ -136,7 +136,7 @@ export async function runGenerate(
   // Cross-run renames. The route ref is the durable identity; the name is
   // derived. When they drift apart (a better algorithm, a spec edit), the
   // tool's dashboard overrides are keyed by the old name and would silently
-  // stop applying — so they are re-keyed here, before step 6 reads them.
+  // stop applying - so they are re-keyed here, before step 6 reads them.
   const refOf = (tool: (typeof named)[number]): string => tool.endpointRef ?? tool.source.ref;
   const crossRenames: { from: string; to: string }[] = [];
   if (options.previousNames) {
@@ -235,7 +235,7 @@ export async function runGenerate(
           level: "warning" as const,
           tool: rename.to,
           message:
-            `Renamed "${rename.from}" → "${rename.to}" since the last run. ` +
+            `Renamed "${rename.from}" -> "${rename.to}" since the last run. ` +
             "Dashboard edits moved with it; update any code that imported the old name.",
         })),
         ...formFindings,

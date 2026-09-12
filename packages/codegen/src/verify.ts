@@ -3,8 +3,8 @@
  *
  * Why this exists: a generated surface's quality was only ever discovered
  * after deploy, by an external audit reading the page's registry. Verify runs
- * the same rubric over the tools a run would register — name shape, what the
- * description covers, field text, annotations, surface size — and prints a
+ * the same rubric over the tools a run would register - name shape, what the
+ * description covers, field text, annotations, surface size - and prints a
  * scorecard before anything ships.
  *
  * The checks are deterministic: same tools in, same verdict out, no key, no
@@ -133,8 +133,8 @@ function check(area: string, offenders: string[], okText: string): VerifyCheck {
 }
 
 /**
- * Walk every input field of a schema — nested objects and array items, two
- * levels down, mirroring the describe layer's coverage — and run `visit` on
+ * Walk every input field of a schema - nested objects and array items, two
+ * levels down, mirroring the describe layer's coverage - and run `visit` on
  * each name and its text.
  */
 function eachField(
@@ -192,7 +192,7 @@ export function verifyTools(
   const longNames = registered
     .filter((tool) => tool.name.length > NAME_MAX)
     .map(
-      (tool) => `${tool.name} (${tool.name.length} chars) — rename it in the dashboard or config.`,
+      (tool) => `${tool.name} (${tool.name.length} chars) - rename it in the dashboard or config.`,
     );
   const longParamNames: string[] = [];
   const longParamDescriptions: string[] = [];
@@ -200,46 +200,46 @@ export function verifyTools(
     eachField(tool.inputSchema, 0, (name, description) => {
       if (name.length > PARAM_NAME_MAX) {
         longParamNames.push(
-          `${tool.name} → ${name} (${name.length} chars) — parameter names max ${PARAM_NAME_MAX}.`,
+          `${tool.name} -> ${name} (${name.length} chars) - parameter names max ${PARAM_NAME_MAX}.`,
         );
       }
       if (description && description.length > FIELD_DESCRIPTION_MAX) {
         longParamDescriptions.push(
-          `${tool.name} → ${name} (${description.length} chars) — over the ${FIELD_DESCRIPTION_MAX}-character parameter budget; tighten it.`,
+          `${tool.name} -> ${name} (${description.length} chars) - over the ${FIELD_DESCRIPTION_MAX}-character parameter budget; tighten it.`,
         );
       }
     });
   }
   const nonVerb = registered
     .filter((tool) => !KNOWN_VERBS.has(tool.name.split("-")[0] ?? ""))
-    .map((tool) => `${tool.name} — agents pick tools by their first word; lead with the action.`);
+    .map((tool) => `${tool.name} - agents pick tools by their first word; lead with the action.`);
 
   const longDescriptions = registered
     .filter((tool) => tool.description && tool.description.length > TOOL_DESCRIPTION_MAX)
     .map(
       (tool) =>
-        `${tool.name} (${tool.description.length} chars) — over the ${TOOL_DESCRIPTION_MAX}-character tool budget; tighten it.`,
+        `${tool.name} (${tool.description.length} chars) - over the ${TOOL_DESCRIPTION_MAX}-character tool budget; tighten it.`,
     );
 
   const noDescription = registered
     .filter((tool) => !tool.description || tool.description.trim() === "")
-    .map((tool) => `${tool.name} — no description; the tool is invisible to agents.`);
+    .map((tool) => `${tool.name} - no description; the tool is invisible to agents.`);
   const templateDescription = registered
     .filter((tool) => tool.descriptionSource === "generated-template")
-    .map((tool) => `${tool.name} — description is a machine draft; write the real one.`);
+    .map((tool) => `${tool.name} - description is a machine draft; write the real one.`);
   const noReturnShape = registered
     .filter(
       (tool) => tool.outputSchema && tool.description && !RETURN_LANGUAGE.test(tool.description),
     )
-    .map((tool) => `${tool.name} — the description never says what comes back.`);
+    .map((tool) => `${tool.name} - the description never says what comes back.`);
 
   const bareFields = registered
     .filter((tool) => hasBareField(tool.inputSchema, 0))
-    .map((tool) => `${tool.name} — an input field has no description an agent can act on.`);
+    .map((tool) => `${tool.name} - an input field has no description an agent can act on.`);
 
   const readWithoutHint = registered
     .filter((tool) => tool.sideEffect === "read" && !tool.hints.readOnlyHint)
-    .map((tool) => `${tool.name} — a read without readOnlyHint looks unsafe to call.`);
+    .map((tool) => `${tool.name} - a read without readOnlyHint looks unsafe to call.`);
 
   const checks: VerifyCheck[] = [
     check(
@@ -296,7 +296,7 @@ export function verifyTools(
       area: "Surface",
       summary: `${surfaceTotal} registered (${breakdown})`,
       findings: [
-        `${surfaceTotal} tools register on this surface (${breakdown}) — agents choose measurably worse past a handful. ` +
+        `${surfaceTotal} tools register on this surface (${breakdown}) - agents choose measurably worse past a handful. ` +
           "Withhold unreviewed tools, split journeys, or narrow with safety.exclude.",
       ],
       level: "warning",
@@ -355,7 +355,7 @@ function journeyStepNames(contents: string): string[] {
     const keyMatch = keyPattern.exec(body);
     if (keyMatch) {
       names.push(keyMatch[1] ?? "");
-      // The match consumed the step's opening brace — count it, since the
+      // The match consumed the step's opening brace - count it, since the
       // walk skips past the whole match including that brace.
       innerDepth++;
       i = cursor + keyMatch[0].length - 1;
@@ -385,33 +385,33 @@ export function verifyJourneyFiles(files: JourneyFileInput[]): VerifyCheck[] {
   for (const { path, contents } of files) {
     if (!/createJourney\s*\(/.test(contents)) {
       structural.push(
-        `${path} — no createJourney() call; files in journeys/ must define a journey.`,
+        `${path} - no createJourney() call; files in journeys/ must define a journey.`,
       );
       continue;
     }
     if (!/submit\s*:/.test(contents) || !/run\s*:/.test(contents)) {
       structural.push(
-        `${path} — no submit gate with a run; a journey without one is just loose tools.`,
+        `${path} - no submit gate with a run; a journey without one is just loose tools.`,
       );
     }
     const steps = journeyStepNames(contents);
     if (steps.length > 5) {
       warnings.push(
-        `${path} — ${steps.length} steps; past five, agents lose the thread. Split it into two journeys.`,
+        `${path} - ${steps.length} steps; past five, agents lose the thread. Split it into two journeys.`,
       );
     }
     for (const match of contents.matchAll(/description\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
       const text = match[1] ?? "";
       if (text.length > TOOL_DESCRIPTION_MAX) {
         budget.push(
-          `${path} — a description runs ${text.length} characters (max ${TOOL_DESCRIPTION_MAX}); tighten it.`,
+          `${path} - a description runs ${text.length} characters (max ${TOOL_DESCRIPTION_MAX}); tighten it.`,
         );
       }
     }
     const withoutImports = contents.replace(/^\s*import\s.*$/gm, "");
     if (/\b(?:fetch|callApi)\s*\(/.test(withoutImports)) {
       warnings.push(
-        `${path} — calls fetch/callApi directly; use the generated raw callers (fetchX) or a tool's execute, so the contract lives in one place.`,
+        `${path} - calls fetch/callApi directly; use the generated raw callers (fetchX) or a tool's execute, so the contract lives in one place.`,
       );
     }
   }

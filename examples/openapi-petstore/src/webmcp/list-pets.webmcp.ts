@@ -1,6 +1,6 @@
 import { getModelContext, callApi, toolResult, asToolError } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * List all pets in the store. Returns an array of pets.
  *
@@ -34,13 +34,22 @@ export const listPetsHints = {"readOnlyHint":true,"destructiveHint":false,"idemp
 /** The tool definition, minus `execute` (which is yours, below the marker). */
 export const listPetsTool = {
   name: "list-pets",
+  title: "List Pets",
   description: "List all pets in the store. Returns an array of pets.",
   inputSchema: listPetsInputSchema,
   annotations: {
     readOnlyHint: true,
     untrustedContentHint: true,
+    consequentialHint: false,
   },
 };
+
+/** The bare request, without the agent-facing result wrapping. Journeys
+ * and your own code compose this; executeListPets is the agent-facing one. */
+export async function fetchListPets(input: ListPetsInput, signal?: AbortSignal) {
+  const data = await callApi("/pets", { method: "GET", query: { status: input.status }, signal });
+  return data;
+}
 
 /**
  * Register this tool with WebMCP. Call it once on page load, or use
@@ -69,7 +78,7 @@ export async function registerListPets(signal?: AbortSignal): Promise<void> {
   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "list-pets".

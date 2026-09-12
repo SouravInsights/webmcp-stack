@@ -1,6 +1,6 @@
 import { callApi, toolDisabled } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * Create a new trip. Returns the trip.
  *
@@ -141,7 +141,7 @@ export async function registerCreateTrip(signal?: AbortSignal): Promise<void> {
   //   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "create-trip".

@@ -92,7 +92,7 @@ describe("analyzeRoute", () => {
     ["patch", "/v1/users/me", "update-current-user"],
   ];
 
-  it.each(cases)("%s %s → %s", (method, path, expected) => {
+  it.each(cases)("%s %s -> %s", (method, path, expected) => {
     expect(analyzeRoute(method, path).base).toBe(expected);
   });
 
