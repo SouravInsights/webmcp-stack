@@ -109,19 +109,35 @@ book-ride-set-pickup-time       Set when the user wants to be picked up. Part of
 book-ride-submit                Request the ride and show the driver's details.
 ```
 
-The agent fills the form by calling them in order, reading each reply:
+The agent fills the form by calling them in order, reading each reply. The
+whole exchange, as a diagram:
 
-```text
-agent  book-ride-resolve-destination { "address": "SFO airport" }
-tool   Stored. Still needed: book-ride-set-pickup-time, book-ride-submit.
+```mermaid
+sequenceDiagram
+    actor User
+    actor Agent as Your coding agent
+    participant Page as Page (WebMCP)
+    participant API as Your backend
 
-agent  book-ride-set-pickup-time { "pickupAt": "2026-03-14T19:30:00Z" }
-tool   Stored. The journey is ready. Call book-ride-submit.
+    Note over Page: createJourney().register() ran on load
+    Page->>Agent: tools registered: resolve-destination, set-pickup-time, submit
 
-agent  book-ride-submit
-       (the page asks the human: "Allow the agent to: Request the ride and show the driver's details.")
-human  approves
-tool   ride requested
+    Agent->>Page: book-ride-resolve-destination({ address: "SFO airport" })
+    Page->>API: geocode-address
+    API-->>Page: coordinates
+    Note right of Page: stored on the draft
+    Page-->>Agent: Stored. Still needed: set-pickup-time, submit
+
+    Agent->>Page: book-ride-set-pickup-time({ pickupAt: "2026-03-14T19:30:00Z" })
+    Page-->>Agent: Stored. Ready. Call book-ride-submit.
+
+    Agent->>Page: book-ride-submit
+    Page->>User: confirm "Request the ride?"
+    User-->>Page: approves
+    Page->>API: request-ride(build(draft))
+    API-->>Page: ride requested
+    Page-->>Agent: done
+    Note over Page: draft cleared
 ```
 
 Two details are doing a lot of work here. The "still needed" replies are how the

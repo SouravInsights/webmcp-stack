@@ -10,7 +10,23 @@ changes something and the screen does not move, the person sees nothing happen, 
 experiences of your app drift apart: the agent's and the human's.
 
 So a tool's job is not finished when the request succeeds. It is finished when the page
-reflects it.
+reflects it. One step in the call is easy to forget, because nothing fails when you skip it:
+
+```mermaid
+sequenceDiagram
+    actor User as Human
+    actor Agent as Agent
+    participant Page as Page (WebMCP)
+    participant API as Your API
+
+    Agent->>Page: call a tool
+    Note over Page: the browser validates the input against the schema
+    Page->>API: execute() calls your real endpoint
+    API-->>Page: the response
+    Note over Page: update the UI: navigate, invalidate a query, dispatch an event
+    Page-->>Agent: toolResult
+    Note over User: the human sees the change
+```
 
 ## The pattern
 
