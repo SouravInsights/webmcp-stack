@@ -1,3 +1,4 @@
+import { remarkMdxMermaid } from "fumadocs-core/mdx-plugins";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 
 export const docs = defineDocs({
@@ -6,7 +7,8 @@ export const docs = defineDocs({
 
 export default defineConfig({
   mdxOptions: {
-    remarkPlugins: [],
+    // ```mermaid blocks become <Mermaid chart="..." />; see components/mermaid.tsx.
+    remarkPlugins: [remarkMdxMermaid],
     rehypePlugins: [],
   },
 });
