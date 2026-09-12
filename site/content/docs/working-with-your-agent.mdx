@@ -50,43 +50,6 @@ safety rules instead of inventing its own.
 3. **The existing generated tools**, so the agent composes them instead of
 re-implementing the API.
 
-## Prompts that work
-
-**Improve a tool's description.** Descriptions are the highest-leverage edit,
-and a small prompt goes a long way:
-
-> Read `.agents/skills/webmcp-tools/SKILL.md`. Then look at
-> `src/webmcp/list-trips.webmcp.ts`. The description reads mechanical. Rewrite
-> it so an agent knows what it does, when to use it, and what it returns, within
-> the skill's budget. Put the new text in `.webmcp-codegen.json`, not in the
-> generated region.
-
-**Write a journey.** This is the one worth getting right. A good prompt names
-the goal, the data the agent cannot invent, and the moment that needs a human:
-
-> Read `.agents/skills/webmcp-tools/SKILL.md` and the generated tools in
-> `src/webmcp`.
->
-> Write a journey called `book-ride` in `src/webmcp/journeys`. Goal: let a user
-> book a ride to a destination they give.
->
-> - The ride API needs coordinates, which only the geocode endpoint can
->   provide. Compose the generated `geocode-address` tool for that step and
->   store the result on the draft as `destination`.
-> - The user sets a pickup time in a second step.
-> - Requesting the ride is a write, so it goes through the submit gate, not a
->   step. Use the real `request-ride` execute as the submit's `run`.
->
-> Run `npx @webmcp-stack/codegen verify` when you are done and fix what it
-> reports.
-
-**Review the whole surface.** Useful before a release:
-
-> Read `.agents/skills/webmcp-tools/SKILL.md`. Review every tool in
-> `src/webmcp`. For each one, tell me: is the name intent-shaped, does the
-> description say what it returns, and should an agent be able to call it at
-> all? Do not enable any withheld tool. List what you would change and why.
-
 ## What to check when the agent is done
 
 An agent can be confidently wrong, especially about intent. Before you accept

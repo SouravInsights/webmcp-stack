@@ -52,20 +52,6 @@ The generated tools register on page load. To watch that happen:
   dashboard (server-side, so without your browser session; auth'd endpoints will answer
   accordingly).
 
-## The dashboard
-
-```bash
-npx @webmcp-stack/codegen dev
-```
-
-![The webmcp-codegen dashboard](/images/dev-server-dashboard.png)
-
-A local control panel for the generated tools: browse and search them grouped by risk
-level, see each one's route and audit findings, edit descriptions, toggle tools on and
-off, and run them directly. Edits are written to `.webmcp-codegen.json` as overrides, so
-they survive regeneration and can be committed. The dashboard never touches your app: it
-is a localhost page served by the CLI, gone when you Ctrl+C.
-
 ## CI
 
 The audit exits non-zero on errors, which makes it a CI check:

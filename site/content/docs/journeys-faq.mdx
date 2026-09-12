@@ -3,8 +3,6 @@ title: Journey questions, answered
 description: The draft, the lifecycle, what the agent does and what you do, and the edge cases, answered in plain terms.
 ---
 
-# Journey questions, answered
-
 The [journeys page](/docs/journeys) explains the feature. This page answers the
 questions people ask once they read the code. None of them are dumb questions;
 they are the ones almost everyone has.
@@ -57,9 +55,7 @@ Nothing durable, ever.
 
 The simplest possible: a flat bag of labeled values, for example
 `{ destination: {...}, pickupAt: "2026-03-14T19:30:00Z" }`. Nothing enforces
-nesting, and any step can write any field. One caveat: if two steps use the same
-field name, the second silently overwrites the first. Avoiding that is on
-whoever writes the journey.
+nesting, and any step can write any field.
 
 ## Will it hold data reliably for a session?
 
