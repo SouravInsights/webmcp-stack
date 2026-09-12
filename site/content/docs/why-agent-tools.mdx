@@ -1,0 +1,118 @@
+---
+title: Why make your site agent-ready
+description: Agents already read your pages and guess. A small set of well-described tools is how your site takes part on purpose, instead of by accident.
+---
+
+## Agents are already using your site
+
+An agent is a program that reads a page and then acts. It books the flight, files
+the expense, cancels the subscription, checks the order. People are already
+pointing agents at the sites they use, and those agents are reading your HTML
+and guessing which button means "refund".
+
+That guess is the problem. HTML was built to be rendered for a person, not
+called by a program. The agent sees a wall of markup, infers that the big red
+button is the destructive one, and sometimes it is right. WebMCP is the
+browser's answer: a page can register a small set of typed tools, with names,
+descriptions, and input schemas, that an agent calls directly, in the signed-in
+user's session.
+
+So the choice is not whether agents will act on your site. It is whether they
+act through something you described, or through something they inferred.
+
+## A few good tools beat a mirror of your API
+
+The instinct is to expose everything. Resist it.
+
+A tool's description is part of the prompt the model reasons over. Fifty tools
+make the model choose worse, not better. The surface agents use well is small
+and intent-shaped:
+
+- `search-flights` instead of `get-v1-flights`
+- `cancel-order` instead of `delete-order-item`
+- `document-trip` instead of `post-trips` plus `post-trips-id-media`
+
+Think about the handful of things a helpful person would do on your site for
+someone else. Those are the tools. The rest is API you keep for yourself.
+
+## It is a safety decision, not just a feature
+
+The caller is a model acting as your user, and it may be reading page content an
+attacker influenced. Every tool you expose is both an API and a security
+surface, and more tools means more chances to pick the wrong one. A few rules
+follow from that, and this tool applies them by default:
+
+- Reads can work immediately. They change nothing.
+- Writes stay off until a human turns them on, one at a time.
+- Destructive actions ask the user to confirm before every call.
+- The schema is not the security boundary. Your server still validates every
+  call, because the tool calls your real endpoint, not a generated shortcut.
+
+## What this tool does for you
+
+`@webmcp-stack/codegen` turns the contract you already have, an OpenAPI spec or
+your validation schemas, into real TypeScript files in your repo:
+
+- It names and describes each endpoint the way an agent reads it, and writes
+  the input schema from the types you already defined.
+- It classifies every endpoint read, write, or destructive, and withholds the
+  ones an agent should not see yet.
+- It generates the user-confirmation step for mutations in a region you cannot
+  accidentally edit away.
+- It scaffolds a skill file so your own coding agent writes the pieces that need
+  product knowledge, like journeys, in the shape this tool expects.
+- It audits the result, in plain language, and `verify` fails CI when something
+  is wrong.
+
+## Who this is for
+
+This tool generates from a contract you maintain: an OpenAPI spec, or the
+validation schemas your app already uses. If you have one, it turns that into a
+safe agent surface. If you do not, writing it is the work to do first.
+
+That is deliberate. It does not read your code and guess at intent, because a
+tool is only as good as the source behind it: a vague or stale contract makes
+vague or stale tools. A generator that claims to work on any codebase, by
+inferring meaning from source, tends to work well nowhere. We would rather do
+this one thing well.
+
+## What it does not do
+
+Being clear about the edges is part of using it well:
+
+- **It does not decide your product's intents.** An OpenAPI spec says
+  `POST /v1/trips` exists. It does not say that creating a trip is really
+  "search, set details, confirm". That lives in your product, and a person or
+  their agent has to write it. See [Working with your coding
+  agent](/docs/working-with-your-agent).
+- **It does not make an unsafe API safe.** It calls your real endpoint on
+  purpose, so your validation, permissions, and rate limits still do the real
+  work.
+- **It does not guarantee an agent uses your tools well.** Good names and
+  descriptions make it far more likely. Nothing makes it certain.
+- **It does not run a model.** Generation is deterministic. No key, no network,
+  no surprises between two runs.
+
+## Honesty about where WebMCP is
+
+WebMCP is early, and the specification is still moving. It may change in ways
+that affect what you generated: this project pins the draft it targets and
+reports spec drift, but treat the generated surface as something you review,
+not something you set and forget.
+
+That is also why the output is plain files in your repo with no runtime
+dependency. If this tool disappears tomorrow, your tools keep working.
+
+## Where to go next
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart">
+    Generate a working surface in about five minutes.
+  </Card>
+  <Card title="After you generate" href="/docs/after-you-generate">
+    The tools exist. Now decide what agents may actually do, and keep it honest.
+  </Card>
+  <Card title="Working with your coding agent" href="/docs/working-with-your-agent">
+    How to prompt an agent to extend the surface and write journeys.
+  </Card>
+</Cards>

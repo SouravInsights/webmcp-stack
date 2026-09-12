@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://webmcp-stack.vercel.app">
+  <a href="https://webmcp.souravinsights.com">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./brand/logo-mark.svg">
       <source media="(prefers-color-scheme: light)" srcset="./brand/logo-mark-light.svg">
@@ -8,15 +8,15 @@
   </a>
   <h1>webmcp-stack</h1>
   <p><strong>The open-source developer stack for WebMCP.</strong></p>
-  <p>Today: codegen. The goal is the whole agent-surface lifecycle in one stack: Generate, Understand, Review, Test, Control, Observe, Secure.</p>
+  <p>Today: codegen. It generates a safe, reviewable agent surface from the contract you already have, and it is built to grow into the rest of the lifecycle.</p>
   <p>
     <a href="https://www.npmjs.com/package/@webmcp-stack/codegen"><img alt="npm version" src="https://img.shields.io/npm/v/@webmcp-stack/codegen?style=flat-square&labelColor=0a0b0f&color=58a6ff"></a>
     <a href="./LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
   </p>
   <p>
-    <a href="https://webmcp-stack.vercel.app/docs">Docs</a> |
+    <a href="https://webmcp.souravinsights.com/docs">Docs</a> |
     <a href="https://www.npmjs.com/package/@webmcp-stack/codegen">npm</a> |
-    <a href="https://webmcp-stack.vercel.app/brand">Brand</a> |
+    <a href="https://webmcp.souravinsights.com/brand">Brand</a> |
     <a href="./docs/about.md">About</a>
   </p>
 </div>
@@ -35,6 +35,8 @@ npx @webmcp-stack/codegen generate
 
 No install, no config for the first run. It detects your app, writes one `.webmcp.ts` file per tool, and adds the registration call to your entry file (additive edits, always reported; if it can't find the entry point, it prints the two lines for you to paste).
 
+It generates from the contract you maintain, not by scanning your app and guessing at intent. A vague spec or schema makes vague tools, so the source is the part worth getting right. If you have an OpenAPI spec or maintained schemas, this is built for you; if not, writing that contract is the first step, and the `schema` source lets you declare tools by hand in the meantime.
+
 ```bash
 npx @webmcp-stack/codegen dev      # local dashboard: browse, edit, toggle, and test tools
 npx @webmcp-stack/codegen verify   # check the tool set against the standard; exits 1 on errors
@@ -48,7 +50,9 @@ You can, and it works. What you get back is different every time, and nothing ch
 
 - **Decides what agents may do.** Every endpoint is classified read, write, or destructive from the HTTP verb, corrected when the name disagrees (`POST /orders/{id}/cancel` is destructive, `POST /search` is a read). Reads work immediately. Everything else is generated but not registered, so enabling a write is a deliberate edit. Webhooks are skipped, auth and admin endpoints are flagged, and anything it cannot classify starts disabled.
 - **Asks the user before any mutation.** Write and destructive tools confirm each call with the user (a plain dialog you can replace). The confirmation lives in the generated region of the file, so it cannot be edited away and survive regeneration.
-- **Writes the text agents read.** Constraints become sentences ("A number from 30 to 600."), names come from intent (`generate-story`, not `post-trips-trip-id-story-generate`), and every description says what the tool returns. Your own text always wins; machine-written text is marked and flagged in the audit.
+- **Writes the text agents read.** Constraints become sentences ("A number from 30 to 600."), names come from intent (`generate-story`, not `post-trips-trip-id-story-generate`), and every description says what the tool returns. Your own text always wins; machine-written text is marked and flagged in the audit. Chrome's character budgets are treated as guidance, not law: machine text is composed to fit, author text is never silently shortened, and `verify` warns on an overrun.
+- **Groups actions the API split.** A begin/end pair like `request-upload` plus `uploads/{uploadId}/complete` is one action, not two. The generator detects the pair, threads the first response into the second by exact name, and adds one withheld coarse tool next to the members. A pair it cannot thread is skipped with a note.
+- **Scaffolds journeys and an agent skill.** `journey.webmcp.ts` plus `journeys/*.webmcp.ts` express a multi-step flow: a page-scoped draft, one tool per step, and a submit gate that refuses until every step is done and confirms with the human before the real write. The barrel registers them and `verify` lints the files. `.agents/skills/webmcp-tools/SKILL.md` teaches your own coding agent the rules.
 - **Says what can be trusted.** Free-text outputs get `untrustedContentHint`; PII-looking fields are named in the report and in a comment in the file; mutating tools on authenticated endpoints carry a session warning; `execute` calls your real endpoint, so your own validation still runs.
 - **Annotates real forms.** A tool that maps to a visible `<form>` can annotate it in place, so the agent fills the same controls the user sees, and the user reviews and submits the write.
 
@@ -65,10 +69,22 @@ A real tool from a real app: `create-trip`, one of 70+ tools generated for [been
  */
 export const createTripTool = {
   name: "create-trip",
+  title: "Create Trip",
   description: "Create a new trip. Returns the trip.",
   inputSchema: createTripInputSchema,  // title, dates, location, theme, field notes
-  annotations: { readOnlyHint: false, untrustedContentHint: true },
+  annotations: {
+    readOnlyHint: false,
+    untrustedContentHint: true,
+    consequentialHint: false,
+  },
 };
+
+// Journeys and your own code compose this raw caller; executeCreateTrip wraps it
+// in the agent-facing result shape.
+export async function fetchCreateTrip(input: CreateTripInput, signal?: AbortSignal) {
+  const data = await callApi("/v1/trips/", { method: "POST", body: { ... }, signal });
+  return data;
+}
 
 // A write tool, so it is withheld: the registration is generated but commented
 // out, including the built-in user confirmation, until you enable it:
@@ -79,9 +95,8 @@ export const createTripTool = {
 
 export async function executeCreateTrip(input: CreateTripInput, signal?: AbortSignal) {
   return toolDisabled("create-trip.webmcp.ts");
-  // Uncomment to go live:
-  // const data = await callApi("https://api.beenthere.page/v1/trips/", { method: "POST", ... });
-  // return toolResult(data);
+  // Uncomment to go live, and uncomment the registration above:
+  // return toolResult(await fetchCreateTrip(input, signal));
 }
 ```
 
@@ -90,9 +105,9 @@ The bar the ecosystem is converging on (Chrome's WebMCP best-practices and tool-
 | The bar | Today |
 |---|---|
 | Verb-first, intent-shaped names, 30 characters or fewer | Enforced on every run |
-| Descriptions say what the tool does and when, positively, within 500 characters; every parameter described within 150 | Assembled on every run; length budgets measured by `verify` next |
-| Outputs within 1.5K characters; errors that help recovery; user-written content marked `untrustedContentHint` | Errors and annotations enforced; output budget next |
-| Exposure as a decision: `readOnlyHint`, registration only where usable, `exposedTo` origin scoping | Annotations and withheld-by-default enforced; `exposedTo` lands as the runtime stabilizes |
+| Descriptions say what the tool does and when, positively, within 500 characters; every parameter described within 150 | Assembled on every run; author text is never shortened, and `verify` warns on overruns |
+| Outputs within 1.5K characters; errors that help recovery; user-written content marked `untrustedContentHint` | Errors, annotations, and the output cap enforced; the cap lives in the generated runtime |
+| Exposure as a decision: `readOnlyHint`, registration only where usable, `exposedTo` origin scoping | Annotations and withheld-by-default enforced; `exposedTo` is a config pass-through to registration |
 | The human in the loop: visible page effects, confirmation on consequential actions | Confirmation enforced, in the generated region where it can't be edited away; visible-effect hook scaffolded |
 | No steering: descriptions never instruct the agent or encode flow control | Flagged in the audit |
 | The schema is not the security boundary; the app still validates at run time | Stated in the output; `execute` calls your real endpoint |
@@ -101,24 +116,23 @@ The bar the ecosystem is converging on (Chrome's WebMCP best-practices and tool-
 
 ## Changing things later
 
-- **`.webmcp-codegen.json`**: per-tool overrides for descriptions, names, enabled state, fields. Applied last, so your text always wins.
+- **`.webmcp-codegen.json`**: per-tool overrides for descriptions, enabled state, and field text. Applied last, so your text always wins.
 - **Dashboard** (`dev`): edit descriptions, toggle tools, run tools against real endpoints. Writes back to the overrides file.
 - **Audit**: problems reported in plain language every run: missing descriptions, mislabeled verbs, PII in outputs, agent-instruction smells, oversized surfaces. Errors block file writing; warnings do not.
 - **`verify`**: the standard, checked locally. Built for CI.
-- **LLM help if you want it**: `--suggest` proposes tools worth declaring, `--llm` drafts descriptions. Advisory only: it never classifies risk, never changes exit codes, and a plain `generate` never makes a network call.
+- **Skill file**: `.agents/skills/webmcp-tools/SKILL.md` teaches your own coding agent the rules (naming, description budgets, journeys). Regenerated on every `generate`; add your own skill directory to stack project-specific rules on top.
 
 ## Where this is going
 
 Codegen first:
 
 - **More sources.** OpenAPI and validation schemas today, tRPC on the list. The rule holds: contracts, not codebases, and the CLI never scans app code.
-- **Journeys.** One tool per CRUD operation is rarely the right shape; agents do better with a few coarse, intent-level tools. Declare a flow once (draft store, step tools, a submit gate), run it in the dashboard, review the generated Mermaid diagram.
-- **The dashboard becomes the review surface.** LLM suggestions arrive as an accept/reject queue that writes to the overrides file. In progress now.
-- **Evals for the LLM layer.** A prompt change becomes a visible regression, not a vibe.
+- **The dashboard becomes the review surface.** A browse-and-score report over the generated surface, with the editing UI kept for the overrides it writes. Parked until the audit package exists.
+- **Skill-file evals.** Shipped at `packages/codegen/evals/skill/`: a prompt set, a generated fixture, deterministic graders, and a control case that runs the sharpest prompt with the skill removed, so you can tell when a model has absorbed the rules.
 
 Then the stack around it: **audit** (point it at a URL, get a report on the surface a visiting agent would find) and **telemetry** (how agents actually use your tools). The goal is one stack where each tool covers one stage of the lifecycle and they compound. The bet underneath: websites are growing an agent-facing surface the way they grew APIs, and that surface needs the same kind of tooling, with higher stakes, because the caller is a model acting as your user, inside your page.
 
-The guarantees hold through all of it: the repo pins the WebMCP draft it targets and watches for spec drift; your overrides, execute bodies, and review decisions survive every regeneration; breaking changes print the exact fix. Deterministic where possible, LLM where useful, honest always.
+The guarantees hold through all of it: the repo pins the WebMCP draft it targets and watches for spec drift; your overrides, execute bodies, and review decisions survive every regeneration; breaking changes print the exact fix. Deterministic where it can be, honest always.
 
 ## Principles
 
@@ -134,7 +148,7 @@ The guarantees hold through all of it: the repo pins the WebMCP draft it targets
 | `packages/codegen` | `@webmcp-stack/codegen` | The CLI and the generation pipeline: sources (OpenAPI, validation schemas), outputs, the safety audit, the dev dashboard. |
 | `examples/openapi-petstore` | private | Example app with tools generated from the Petstore OpenAPI spec. |
 | `site/` | private | Landing page and documentation (Next.js + Fumadocs). |
-| `docs/` | - | Design specs (`specs/`), decision notes (`notes/`), and [what this project is](./docs/about.md). |
+| `docs/` | - | [About](./docs/about.md), design specs (`specs/`), decision notes (`notes/`), research (`research/`), and reviews (`reviews/`). |
 | `scripts/` | - | Committed git hooks (lint on commit, lint + typecheck + test before push). |
 | `brand/` | - | Logo and brand assets. |
 
@@ -152,7 +166,7 @@ pnpm lint:fix
 ```
 
 ```bash
-pnpm --filter openapi-petstore dev   # example app
+pnpm --filter example-openapi-petstore dev   # example app
 pnpm --filter site dev               # landing page & docs on :3001
 ```
 

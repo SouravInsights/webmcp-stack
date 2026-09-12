@@ -7,10 +7,10 @@
  * changing any application code.
  *
  * What we read from each operation:
- *   - name        ← operationId, slugified (falls back to method + path)
- *   - description ← summary, else the first line of description, else a template
- *   - inputSchema ← path + query parameters merged with the JSON request body
- *   - outputSchema ← the first 2xx response's JSON schema, when present
+ *   - name        <- operationId, slugified (falls back to method + path)
+ *   - description <- summary, else the first line of description, else a template
+ *   - inputSchema <- path + query parameters merged with the JSON request body
+ *   - outputSchema <- the first 2xx response's JSON schema, when present
  *
  * Header and cookie parameters are skipped on purpose: agents should not be
  * setting those by hand, and auth headers are the app's job, not the tool's.
@@ -226,7 +226,7 @@ function buildInputSchema(
         for (const key of body.schema.required ?? []) required.add(key);
       }
     } else {
-      // A non-object body (array, raw string, …) goes under a "body" field.
+      // A non-object body (array, raw string, ...) goes under a "body" field.
       properties.body = body.schema;
       if (body.required) required.add("body");
     }

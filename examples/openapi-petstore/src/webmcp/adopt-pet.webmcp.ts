@@ -1,8 +1,8 @@
-import { toolDisabled } from "./runtime.webmcp";
+import { callApi, toolDisabled } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
- * Adopt a pet — this finalizes the adoption paperwork. Returns the pet.
+ * Adopt a pet - this finalizes the adoption paperwork. Returns the pet.
  *
  * Source: POST /pets/{id}/adopt (openapi). Risk: write-confirm.
  * Starts withheld: not registered until you enable it (see registerAdoptPet below).
@@ -15,7 +15,7 @@ export const adoptPetInputSchema = {
   "properties": {
     "id": {
       "type": "string",
-      "description": "Id."
+      "description": "The unique identifier of the pet."
     }
   },
   "required": [
@@ -32,13 +32,22 @@ export const adoptPetHints = {"readOnlyHint":false,"destructiveHint":false,"idem
 /** The tool definition, minus `execute` (which is yours, below the marker). */
 export const adoptPetTool = {
   name: "adopt-pet",
-  description: "Adopt a pet — this finalizes the adoption paperwork. Returns the pet.",
+  title: "Adopt Pet",
+  description: "Adopt a pet - this finalizes the adoption paperwork. Returns the pet.",
   inputSchema: adoptPetInputSchema,
   annotations: {
     readOnlyHint: false,
     untrustedContentHint: true,
+    consequentialHint: false,
   },
 };
+
+/** The bare request, without the agent-facing result wrapping. Journeys
+ * and your own code compose this; executeAdoptPet is the agent-facing one. */
+export async function fetchAdoptPet(input: AdoptPetInput, signal?: AbortSignal) {
+  const data = await callApi(`/pets/${input.id}/adopt`, { method: "POST", signal });
+  return data;
+}
 
 /**
  * Withheld: this tool is not registered, so agents cannot see or pick
@@ -59,7 +68,7 @@ export async function registerAdoptPet(signal?: AbortSignal): Promise<void> {
   //         // This tool changes things, so the user is always asked first. The
   //         // confirmation lives in the generated region: it cannot be edited away.
   //         const confirmed = await requestUserConfirmation(
-  //           "Allow the agent to: Adopt a pet — this finalizes the adoption paperwork. Returns the pet.",
+  //           "Allow the agent to: Adopt a pet - this finalizes the adoption paperwork. Returns the pet.",
   //         );
   //         if (!confirmed) {
   //           return {
@@ -80,7 +89,7 @@ export async function registerAdoptPet(signal?: AbortSignal): Promise<void> {
   //   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "adopt-pet".
@@ -93,7 +102,7 @@ export async function registerAdoptPet(signal?: AbortSignal): Promise<void> {
  * The user is asked to confirm every call (built into the generated region).
  */
 //
-// ⚠ webmcp-codegen flagged these response fields as likely PII: owner.email.
+// ! webmcp-codegen flagged these response fields as likely PII: owner.email.
 // Everything you return reaches the agent. Leave those fields out of what you
 // return unless the agent genuinely needs them, and say so in a comment if you keep them.
 export async function executeAdoptPet(input: AdoptPetInput) {

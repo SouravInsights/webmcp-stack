@@ -1,12 +1,13 @@
 ---
 title: Chrome DevTools WebMCP panel
 description: Inspect, test, and debug your tools with Chrome's built-in WebMCP panel.
+---
 
 Chrome DevTools has a dedicated WebMCP panel that shows every tool your page exposes to AI agents. It's the fastest way to verify your tools work before an agent ever sees them.
 
 ## Open the panel
 
-1. Enable WebMCP: `chrome://flags/#enable-webmcp-testing` (Chrome 146+)
+1. Enable WebMCP: `chrome://flags/#enable-webmcp-testing` (Chrome 149+, Edge 150+. This flag is for local development; production pages use the origin trial.)
 2. Open your app and open DevTools (F12)
 3. Click the **Application** tab
 4. In the sidebar, click **WebMCP**
@@ -15,8 +16,8 @@ Chrome DevTools has a dedicated WebMCP panel that shows every tool your page exp
 
 The panel has two sections:
 
-- **Available Tools** — every tool currently registered on the page, with name, description, and an invocation counter
-- **Invoked Tools** — a log of every tool call, with status, input, and output
+- **Available Tools**: every tool currently registered on the page, with name, description, and an invocation counter
+- **Invoked Tools**: a log of every tool call, with status, input, and output
 
 ## Test a tool manually
 

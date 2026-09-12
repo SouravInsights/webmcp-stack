@@ -33,4 +33,6 @@ export async function registerAllTools(signal?: AbortSignal): Promise<void> {
       console.warn("[webmcp-codegen] a tool failed to register:", error);
     }
   }
+  // Drop journey definitions into ./journeys/ and re-run `generate`:
+  // the next barrel registers every createJourney() export it finds there.
 }

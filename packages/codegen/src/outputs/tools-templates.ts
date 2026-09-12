@@ -33,12 +33,22 @@ import { GENERATED_END, GENERATED_START } from "./tools.js";
  * track the API contract exactly: name, description, schema, input type,
  * hints, and the register() wrapper.
  */
-export function generatedRegion(tool: ReviewedTool): string {
+export function generatedRegion(
+  tool: ReviewedTool,
+  registration?: { exposedTo?: string[] },
+): string {
   const pascal = pascalCase(tool.name);
   const camel = lowercaseFirst(pascal);
   const schemaJson = JSON.stringify(tool.inputSchema, null, 2);
   const inputType = jsonSchemaToTs(tool.inputSchema, undefined);
   const mutates = tool.riskTier !== "safe-read";
+
+  // The second registerTool() argument: the AbortSignal always, plus the
+  // configured origin exposure when the app shares tools with trusted
+  // embedded documents (the spec's exposedTo).
+  const registrationOptions = registration?.exposedTo?.length
+    ? `{ signal, exposedTo: ${JSON.stringify(registration.exposedTo)} },`
+    : `{ signal },`;
 
   // Import only what this file's regions actually use, so generated files
   // pass strict lint configs (no-unused-vars errors fail Next.js builds).
@@ -49,13 +59,18 @@ export function generatedRegion(tool: ReviewedTool): string {
   // fence, so the only runtime helper its live code uses is toolDisabled in
   // the execute scaffold (a defensive refusal if someone registers it by hand).
   const withheld = tool.withheld && !enabled;
-  const hasRoute = Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
+  const hasRoute =
+    Boolean(tool.compose) || Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
   const runtimeImports = withheld
-    ? "toolDisabled"
+    ? hasRoute
+      ? "callApi, toolDisabled"
+      : "toolDisabled"
     : [
         "getModelContext",
         ...(mutates ? ["requestUserConfirmation"] : []),
-        ...(enabled && hasRoute ? ["callApi"] : []),
+        // Every endpoint-backed tool emits a live fetchX raw caller, so
+        // callApi is imported whether the tool itself starts enabled or not.
+        ...(hasRoute ? ["callApi"] : []),
         ...(enabled ? ["toolResult"] : []),
         "asToolError",
         ...(enabled ? [] : ["toolDisabled"]),
@@ -89,7 +104,7 @@ export function generatedRegion(tool: ReviewedTool): string {
         `        }`,
         `      },`,
         `    },`,
-        `    { signal },`,
+        `    ${registrationOptions}`,
         `  );`,
       ]
     : [
@@ -106,7 +121,7 @@ export function generatedRegion(tool: ReviewedTool): string {
         `        }`,
         `      },`,
         `    },`,
-        `    { signal },`,
+        `    ${registrationOptions}`,
         `  );`,
       ];
 
@@ -141,13 +156,27 @@ export function generatedRegion(tool: ReviewedTool): string {
     `/** The tool definition, minus \`execute\` (which is yours, below the marker). */`,
     `export const ${camel}Tool = {`,
     `  name: ${JSON.stringify(tool.name)},`,
+    `  title: ${JSON.stringify(titleFromName(tool.name))},`,
     `  description: ${JSON.stringify(tool.description)},`,
     `  inputSchema: ${camel}InputSchema,`,
     `  annotations: {`,
     `    readOnlyHint: ${tool.hints.readOnlyHint},`,
     `    untrustedContentHint: ${tool.hints.untrustedContentHint},`,
+    `    consequentialHint: ${tool.riskTier === "destructive-confirm"},`,
     `  },`,
     `};`,
+    ...(hasRoute
+      ? [
+          ``,
+          `/** The bare request, without the agent-facing result wrapping. Journeys`,
+          ` * and your own code compose this; execute${pascal} is the agent-facing one. */`,
+          `export async function fetch${pascal}(input: ${tool.inputTypeName}, signal?: AbortSignal) {`,
+          ...(tool.compose
+            ? composedFetchBody(tool.compose)
+            : [`  ${requestCall(tool)}`, `  return data;`]),
+          `}`,
+        ]
+      : []),
     ``,
     ...(withheld
       ? [
@@ -199,7 +228,12 @@ export function generatedRegion(tool: ReviewedTool): string {
  */
 export function ownedRegionScaffold(tool: ReviewedTool): string {
   const pascal = pascalCase(tool.name);
-  const call = requestCall(tool);
+  const hasRoute =
+    Boolean(tool.compose) || Boolean(tool.httpMethod && tool.pathTemplate && tool.paramLocations);
+  // Endpoint-backed tools compose the raw caller from the generated region
+  // (fetchX), so the default execute stays one line and journeys reuse the
+  // exact same request. Schema-only tools keep the honest TODO.
+  const call = hasRoute ? `const data = await fetch${pascal}(input, signal);` : requestCall(tool);
   // An endpoint-backed tool scaffolds a call to its route. A standalone schema
   // tool has no route: the honest scaffold says "wire this to your app's own
   // action" and names nothing we made up.
@@ -247,7 +281,7 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
   if (tool.piiInOutput.length > 0) {
     lines.push(
       `//`,
-      `// ⚠ webmcp-codegen flagged these response fields as likely PII: ${tool.piiInOutput.join(", ")}.`,
+      `// ! webmcp-codegen flagged these response fields as likely PII: ${tool.piiInOutput.join(", ")}.`,
       `// Everything you return reaches the agent. Leave those fields out of what you`,
       `// return unless the agent genuinely needs them, and say so in a comment if you keep them.`,
     );
@@ -276,7 +310,10 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
         ? [
             `  // This tool is withheld: nothing registers it, so agents cannot see`,
             `  // or call it. To enable it, uncomment the request below and the`,
-            `  // registration above, and add callApi and toolResult to the import.`,
+            // Route-backed tools import callApi already (fetchX uses it).
+            hasRoute
+              ? `  // registration above, and add toolResult to the import.`
+              : `  // registration above, and add callApi and toolResult to the import.`,
           ]
         : [
             `  // This tool starts disabled: it ${
@@ -285,7 +322,9 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
                 : `wraps an ${tool.endpointRole} endpoint`
             }. Agents can see it, and calling it tells`,
             `  // them it is disabled. To enable it, delete the line below, uncomment`,
-            `  // the code, and add callApi and toolResult to the import above.`,
+            hasRoute
+              ? `  // the code, and add toolResult to the import above.`
+              : `  // the code, and add callApi and toolResult to the import above.`,
           ]),
       `  void signal; // passed to fetch once you enable the call below`,
       `  return toolDisabled("${tool.name}.webmcp.ts");`,
@@ -304,7 +343,7 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
  * knows: the path template becomes a template literal, query params become
  * the search string, body fields become the JSON body.
  *
- *   "/pets/{id}" + DELETE  →  const data = await callApi(`/pets/${input.id}`, { method: "DELETE" });
+ *   "/pets/{id}" + DELETE  ->  const data = await callApi(`/pets/${input.id}`, { method: "DELETE" });
  *
  * When the source carries no route information, we fall back to an honest
  * TODO instead of inventing a URL.
@@ -314,7 +353,7 @@ export function ownedRegionScaffold(tool: ReviewedTool): string {
  * is frequently a local dev URL (http://localhost:3001); baking that into the
  * generated fetch makes every deployed tool call the visitor's own machine.
  * So: a non-local absolute URL is kept (the API genuinely lives elsewhere),
- * a local one returns undefined so the tool falls back to same-origin —
+ * a local one returns undefined so the tool falls back to same-origin -
  * which is where a deployed app's API actually is.
  */
 export function resolveApiBase(serverUrl: string | undefined): string | undefined {
@@ -330,46 +369,103 @@ export function resolveApiBase(serverUrl: string | undefined): string | undefine
   }
 }
 
-function requestCall(tool: ReviewedTool): string {
-  if (!tool.httpMethod || !tool.pathTemplate || !tool.paramLocations) {
-    return `const data = null; // TODO: call your app's existing code here.`;
-  }
+/**
+ * The arguments to one callApi(...): the path expression (template params
+ * interpolated, non-local server URLs kept) plus method/query/body/signal.
+ * `pathRef` says where each path param's value comes from - ordinary tools
+ * read `input`, the second call of a composed tool reads the first result.
+ */
+function buildCallExpr(options: {
+  httpMethod: string;
+  pathTemplate: string;
+  paramLocations: { path: string[]; query: string[]; body: string[] };
+  serverUrl?: string;
+  pathRef?: (param: string) => string;
+  skipFields?: Set<string>;
+}): string {
+  const {
+    httpMethod,
+    pathTemplate,
+    paramLocations,
+    serverUrl,
+    pathRef = inputRef,
+    skipFields = new Set<string>(),
+  } = options;
+  const { path: pathParams, query: queryParamsAll, body: bodyParamsAll } = paramLocations;
+  const queryParams = queryParamsAll.filter((name) => !skipFields.has(name));
+  const bodyParams = bodyParamsAll.filter((name) => !skipFields.has(name));
 
-  const { path: pathParams, query: queryParams, body: bodyParams } = tool.paramLocations;
-
-  // "/pets/{id}" → `/pets/${input.id}`. Params the schema knows by name.
-  let pathExpr = `\`${tool.pathTemplate.replace(/\{([^}]+)\}/g, (_m, param: string) => `\${${inputRef(param)}}`)}\``;
-  if (pathParams.length === 0) pathExpr = JSON.stringify(tool.pathTemplate);
+  // "/pets/{id}" -> `/pets/${input.id}`. Params the schema knows by name.
+  let pathExpr = `\`${pathTemplate.replace(/\{([^}]+)\}/g, (_m, param: string) => `\${${pathRef(param)}}`)}\``;
+  if (pathParams.length === 0) pathExpr = JSON.stringify(pathTemplate);
 
   // Base URL: default to the page's own origin so a deployed app calls its
   // own API. Baking the spec's servers[0] (often http://localhost:3001) into
   // the generated fetch would make every deployed tool call the visitor's
   // own machine. A non-local public server URL is kept as the default base;
   // a local one is not.
-  const base = resolveApiBase(tool.serverUrl);
+  const base = resolveApiBase(serverUrl);
   if (base) {
     const b = base.endsWith("/") ? base.slice(0, -1) : base;
     pathExpr = `\`${b}\${${pathExpr}}\``;
   }
 
-  const options: string[] = [`method: ${JSON.stringify(tool.httpMethod)}`];
+  const args: string[] = [`method: ${JSON.stringify(httpMethod)}`];
   if (queryParams.length > 0) {
     const entries = queryParams.map((name) => `${safeKey(name)}: ${inputRef(name)}`).join(", ");
-    options.push(`query: { ${entries} }`);
+    args.push(`query: { ${entries} }`);
   }
   if (bodyParams.length > 0) {
     if (bodyParams.length === 1 && bodyParams[0] === "body") {
       // A non-object request body arrives as a single "body" field.
-      options.push(`body: input.body`);
+      args.push(`body: input.body`);
     } else {
       const entries = bodyParams.map((name) => `${safeKey(name)}: ${inputRef(name)}`).join(", ");
-      options.push(`body: { ${entries} }`);
+      args.push(`body: { ${entries} }`);
     }
   }
   // The execute context's signal reaches fetch, so a cancelled call stops.
-  options.push("signal");
+  args.push("signal");
 
-  return `const data = await callApi(${pathExpr}, { ${options.join(", ")} });`;
+  return `${pathExpr}, { ${args.join(", ")} }`;
+}
+
+function requestCall(tool: ReviewedTool): string {
+  if (!tool.httpMethod || !tool.pathTemplate || !tool.paramLocations) {
+    return `const data = null; // TODO: call your app's existing code here.`;
+  }
+  return `const data = await callApi(${buildCallExpr({
+    httpMethod: tool.httpMethod,
+    pathTemplate: tool.pathTemplate,
+    paramLocations: tool.paramLocations,
+    serverUrl: tool.serverUrl,
+  })});`;
+}
+
+/** "uploadId" on the first response: dot access when the name allows it. */
+function firstResultRef(param: string): string {
+  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(param)
+    ? `firstResult.${param}`
+    : `firstResult[${JSON.stringify(param)}]`;
+}
+
+/**
+ * The two calls of a grouped handshake tool: the first request runs, its
+ * response fields fill the second request's path params by exact name, and
+ * the second response is the tool's result. Threaded fields never reach the
+ * agent-facing input - that's the point of the composition.
+ */
+function composedFetchBody(plan: NonNullable<ReviewedTool["compose"]>): string[] {
+  const threaded = new Set(Object.keys(plan.threaded));
+  return [
+    `  const firstResult = (await callApi(${buildCallExpr(plan.first)})) as Record<string, unknown>;`,
+    `  const data = await callApi(${buildCallExpr({
+      ...plan.second,
+      pathRef: (param) => (threaded.has(param) ? firstResultRef(param) : inputRef(param)),
+      skipFields: threaded,
+    })});`,
+    `  return data;`,
+  ];
 }
 
 /**
@@ -408,10 +504,16 @@ export interface WebMcpToolResult {
 /** A tool as the browser runtime understands it. */
 export interface WebMcpToolDefinition {
   name: string;
+  /** A human-facing label for native UIs (the spec's USVString title). */
+  title?: string;
   description: string;
   inputSchema?: Record<string, unknown>;
   /** Hints the agent reads to decide how careful to be with this tool. */
-  annotations?: { readOnlyHint?: boolean; untrustedContentHint?: boolean };
+  annotations?: {
+    readOnlyHint?: boolean;
+    untrustedContentHint?: boolean;
+    consequentialHint?: boolean;
+  };
   execute: (
     input: Record<string, unknown>,
     context?: { signal?: AbortSignal },
@@ -422,7 +524,7 @@ export interface WebMcpToolDefinition {
 export interface ModelContext {
   registerTool(
     tool: WebMcpToolDefinition,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; exposedTo?: string[] },
   ): Promise<void>;
 }
 
@@ -445,6 +547,30 @@ export function getModelContext(): ModelContext | null {
     );
   }
   return modelContext ?? null;
+}
+
+/**
+ * Register every journey exported from the modules the barrel found in
+ * journeys/. Anything with a .register() method counts (createJourney's
+ * return shape); anything else is skipped quietly. One journey failing never
+ * takes the others down with it.
+ */
+export async function registerJourneys(
+  modules: Record<string, unknown>[],
+  signal?: AbortSignal,
+): Promise<void> {
+  for (const module of modules) {
+    for (const value of Object.values(module)) {
+      const journey = value as { register?: unknown } | null;
+      if (journey !== null && typeof journey === "object" && typeof journey.register === "function") {
+        try {
+          await (journey.register as (signal?: AbortSignal) => Promise<void>)(signal);
+        } catch (error) {
+          console.warn("[webmcp-codegen] a journey failed to register:", error);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -486,12 +612,27 @@ export async function callApi(
   }
 }
 
-/** Wrap a result in the MCP shape, so tool bodies stay one line. */
+/** Chrome's output budget: one tool result stays under ~1.5K characters. */
+const TOOL_OUTPUT_MAX = 1536;
+
+const TRUNCATED_NOTICE =
+  "\\n... [truncated to fit the 1.5K output budget - return a smaller slice or paginate]";
+
+/**
+ * Wrap a result in the MCP shape, so tool bodies stay one line. The result
+ * text is capped at Chrome's ~1.5K per-call output budget: oversized payloads
+ * cost the agent context and can trip guardrails, so they are cut with a
+ * notice rather than delivered whole. The cap lives here in the shared
+ * runtime, so it cannot be edited away per tool.
+ */
 export function toolResult(data: unknown): WebMcpToolResult {
+  const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  const fitted =
+    text.length <= TOOL_OUTPUT_MAX
+      ? text
+      : text.slice(0, TOOL_OUTPUT_MAX - TRUNCATED_NOTICE.length) + TRUNCATED_NOTICE;
   return {
-    content: [
-      { type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) },
-    ],
+    content: [{ type: "text", text: fitted }],
   };
 }
 
@@ -542,11 +683,19 @@ export function requestUserConfirmation(message: string): Promise<boolean> {
 }
 
 /** The barrel: one import that registers every generated tool. */
-export function barrelSource(tools: ReviewedTool[]): string {
+export function barrelSource(tools: ReviewedTool[], journeyFiles: string[] = []): string {
   const imports = tools
     .map((tool) => `import { register${pascalCase(tool.name)} } from "./${tool.name}.webmcp";`)
     .join("\n");
   const names = tools.map((tool) => `register${pascalCase(tool.name)}`).join(",\n  ");
+
+  const journeyImports = journeyFiles
+    .map(
+      (file, index) =>
+        `import * as journeyModule${index} from "./journeys/${file.replace(/\.ts$/, "")}";`,
+    )
+    .join("\n");
+  const journeyModuleNames = journeyFiles.map((_, index) => `journeyModule${index}`).join(", ");
 
   return `/**
  * Generated by webmcp-codegen. This file is fully regenerated on every run.
@@ -557,11 +706,11 @@ export function barrelSource(tools: ReviewedTool[]): string {
  */
 
 ${imports}
-
+${journeyFiles.length > 0 ? `\nimport { registerJourneys } from "./runtime.webmcp";\n${journeyImports}\n` : ""}
 const registrations = [
   ${names}
 ];
-
+${journeyFiles.length > 0 ? `\nconst journeyModules = [${journeyModuleNames}];\n` : ""}
 /**
  * Register every generated tool with WebMCP. One tool failing (for example
  * because the page's Permissions-Policy disables tools) never takes the
@@ -575,11 +724,30 @@ export async function registerAllTools(signal?: AbortSignal): Promise<void> {
       console.warn("[webmcp-codegen] a tool failed to register:", error);
     }
   }
+  ${
+    journeyFiles.length > 0
+      ? `// Journeys come last: their steps compose the tools above.
+  await registerJourneys(journeyModules, signal);`
+      : `// Drop journey definitions into ./journeys/ and re-run \`generate\`:
+  // the next barrel registers every createJourney() export it finds there.`
+  }
 }
 `;
 }
 
-/** "GetOrderStatus" → "getOrderStatus" (for the generated const names). */
+/** "GetOrderStatus" -> "getOrderStatus" (for the generated const names). */
+/**
+ * The spec's human-facing `title`: "list-trips" -> "List Trips". Derived from
+ * the name so the two never disagree.
+ */
+function titleFromName(name: string): string {
+  return name
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function lowercaseFirst(pascal: string): string {
   return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }

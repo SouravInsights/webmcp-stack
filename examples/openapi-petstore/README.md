@@ -1,4 +1,4 @@
-# Example: OpenAPI → WebMCP tools
+# Example: OpenAPI -> WebMCP tools
 
 The smallest possible end-to-end demo of `webmcp-codegen`: a trimmed Petstore
 OpenAPI spec, one config file, and the generated output (committed so you can
@@ -30,7 +30,7 @@ node ../../packages/codegen/dist/cli.js generate
 
 ## The regeneration promise
 
-Edit the `throw new Error("Not implemented…")` in any tool's `execute()` to
+Edit the `throw new Error("Not implemented...")` in any tool's `execute()` to
 return something real, then change a description in `openapi.yaml` and re-run
 `generate`. The description updates; your `execute()` is untouched. That split
 is the point of the tool.

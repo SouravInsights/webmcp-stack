@@ -20,8 +20,6 @@ The main command. Resolves where tools come from and where they go, in this orde
   --force        Write files even when the audit reports errors
   --config PATH  Use a config file at PATH
   --watch        Re-generate when files change
-  --llm          Improve the names and descriptions of the tools being generated (LLM)
-  --suggest      Find schemas worth declaring as tools (LLM)
 ```
 
 A successful run also wires registration into your app (two additive lines; see
@@ -42,40 +40,6 @@ Re-runs on every relevant file change. Regeneration is cheap and merge-safe, so 
 keeps tools in sync while you edit the spec. The watcher ignores its own outputs
 (`src/webmcp`, `.webmcp-codegen.json`), so it never loops.
 
-## The two LLM flags
-
-Both are **opt-in** — plain `generate` never touches a model, never sends anything anywhere,
-never needs a key. Turn one on only when you want the LLM's help. They answer two different
-questions:
-
-**`generate --llm`** — *"make the tools I already generate better."*
-You have a spec (or a config) and tools generate. The LLM reads each tool's name, description,
-and fields and proposes clearer descriptions and names, printed as `◦` draft lines for you to
-review. Nothing is auto-applied; your hand-written text always wins; safety classification is
-never the model's call.
-
-**`generate --suggest`** — *"find tools I haven't declared yet."*
-You have validation schemas but no generated tools. The CLI finds your schema modules itself
-(no file path needed) and the LLM proposes which schemas are worth declaring as tools. Nothing
-is written; declaring is your edit to `codegen.config.mjs`.
-
-The rule of thumb: **tools already exist → `--llm`; starting from schemas → `--suggest`.**
-
-### The API key
-
-Neither flag requires your own key. The first time you run one without a key configured, an
-interactive terminal offers three choices:
-
-- **Use the free hosted tier** — webmcp-stack's shared key (rate-limited), zero setup. The key
-  lives on our server, never in the package.
-- **Enter my own API key** — OpenRouter, OpenAI, or any OpenAI-compatible provider. Used for
-  this command only, never stored, input is masked.
-- **Skip** — continue without LLM features, exactly as if you'd passed neither flag.
-
-In CI (non-interactive), both flags quietly produce the deterministic output — a prompt never
-blocks a pipeline, and a failing provider becomes one note line, never a failure. To use your
-own key always, set `WEBMCP_LLM_API_KEY` or `OPENAI_API_KEY` in your environment.
-
 ## `npx @webmcp-stack/codegen verify`
 
 Measures your generated tools against the quality standard they are supposed to meet, before
@@ -83,11 +47,11 @@ anything ships. Runs the same pipeline as `generate` (writing nothing) and repor
 scorecard:
 
 ```
-✓ Names: all 35 names within 30 characters, verb-first
-! Descriptions: 2 problems
-✓ Fields: every input field described, nested ones included
-✓ Annotations: reads declare readOnlyHint; content declares its trust
-! Surface: 35 registered
+ok  Names: all 35 names within 30 characters, verb-first
+!   Descriptions: 2 problems
+ok  Fields: every input field described, nested ones included
+ok  Annotations: reads declare readOnlyHint; content declares its trust
+!   Surface: 35 registered
 ```
 
 Each finding names the tool and what to do about it. Exits 1 on error-level findings (a tool

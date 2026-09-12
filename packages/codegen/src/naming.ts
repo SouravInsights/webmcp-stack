@@ -6,13 +6,13 @@
  * ("post-trips-trip-id-story-generate"). Every tool gets its name from the
  * best signal available, in order:
  *
- *   1. An explicit override (config or .webmcp-codegen.json) — always wins.
+ *   1. An explicit override (config or .webmcp-codegen.json) - always wins.
  *   2. A cleaned operationId, when the spec has one.
  *   3. An intent-shaped name derived from the route (analyzeRoute).
- *   4. The plain method+path concat — the total fallback that can never fail.
+ *   4. The plain method+path concat - the total fallback that can never fail.
  *
  * resolveNames() runs the set-level pass: collisions are deepened with
- * parent context ("generate-story" → "generate-trip-story"), and every
+ * parent context ("generate-story" -> "generate-trip-story"), and every
  * rename is reported.
  */
 
@@ -25,17 +25,17 @@ export const TOOL_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
  * Turn an operationId or route fragment into a valid, readable tool name.
  *
  * Examples:
- *   "getOrderStatus"      → "get-order-status"
- *   "GET /orders/{id}"    → "get-orders-id"
- *   "list_pets"           → "list-pets"
+ *   "getOrderStatus"      -> "get-order-status"
+ *   "GET /orders/{id}"    -> "get-orders-id"
+ *   "list_pets"           -> "list-pets"
  */
 export function toToolName(raw: string): string {
   const name = raw
-    // Split acronym boundaries first: "getHTTPStatus" → "get-HTTPStatus"
+    // Split acronym boundaries first: "getHTTPStatus" -> "get-HTTPStatus"
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
-    // Then camelCase and PascalCase boundaries: "getOrder" → "get-Order"
+    // Then camelCase and PascalCase boundaries: "getOrder" -> "get-Order"
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-    // Path placeholders and separators become dashes: "/orders/{id}" → "-orders-id"
+    // Path placeholders and separators become dashes: "/orders/{id}" -> "-orders-id"
     .replace(/[{}/_\s.]+/g, "-")
     // Anything left that isn't a letter, digit or dash is dropped
     .replace(/[^a-zA-Z0-9-]/g, "")
@@ -72,8 +72,8 @@ export function nameFromRoute(method: string, path: string): string {
 export function cleanOperationId(operationId: string): string {
   let id = operationId;
 
-  // Drop a leading framework prefix: "TripsController_create" → "create",
-  // "user.service.getProfile" → "getProfile". Everything up to and including
+  // Drop a leading framework prefix: "TripsController_create" -> "create",
+  // "user.service.getProfile" -> "getProfile". Everything up to and including
   // the first scaffolding marker goes, and only when something remains.
   const segments = id.split(/_|\./).filter(Boolean);
   const marker = segments.findIndex((s) => /(controller|service|api|handler)$/i.test(s));
@@ -81,7 +81,7 @@ export function cleanOperationId(operationId: string): string {
     id = segments.slice(marker + 1).join("_");
   }
 
-  // Drop a trailing version marker: "createTrip_v2" → "createTrip".
+  // Drop a trailing version marker: "createTrip_v2" -> "createTrip".
   id = id.replace(/[._-]?v\d+$/i, "");
 
   return toToolName(id);
@@ -205,7 +205,7 @@ export interface RouteAnalysis {
   base: string;
   /**
    * "intent" names can absorb parent context on collision ("generate-story"
-   * → "generate-trip-story"); "fallback" names are fixed strings.
+   * -> "generate-trip-story"); "fallback" names are fixed strings.
    */
   tier: "intent" | "fallback";
   /** The verb and noun the name is built from: verb + context + noun. */
@@ -225,7 +225,7 @@ export interface RouteAnalysis {
   droppedVersion: boolean;
 }
 
-/** Singularize the last word of a phrase: "saved-places" → "saved-place". */
+/** Singularize the last word of a phrase: "saved-places" -> "saved-place". */
 function singularPhrase(phrase: string): string {
   const words = phrase.split("-");
   words[words.length - 1] = pluralize.singular(words[words.length - 1] as string);
@@ -260,7 +260,7 @@ function intentName(
   reserve: string[] = [],
 ): RouteAnalysis {
   // Context is stored nearest-first, but names read outermost-first:
-  // "list-explore-destination-candidates", not "list-destination-explore-…".
+  // "list-explore-destination-candidates", not "list-destination-explore-...".
   const used = context.slice(0, minDepth).reverse();
   const base = [verb, ...used, noun].filter(Boolean).join("-");
   return { base, tier: "intent", verb, noun, context, minDepth, droppedVersion, reserve };
@@ -271,18 +271,18 @@ function intentName(
  *
  * Two shapes are recognized:
  *
- *   Action endpoints — the last segment starts with a known verb, so the
- *   name is the action: POST /trips/{id}/story/generate → "generate-story".
+ *   Action endpoints - the last segment starts with a known verb, so the
+ *   name is the action: POST /trips/{id}/story/generate -> "generate-story".
  *   Action names stay minimal; parent context is spent only on collision.
  *
- *   Plain REST — the method implies the verb and the path shape says member
- *   or collection: POST /trips → "create-trip", GET /trips/{id} →
- *   "get-trip", GET /trips/{id}/blocks → "list-trip-blocks". Nested reads
+ *   Plain REST - the method implies the verb and the path shape says member
+ *   or collection: POST /trips -> "create-trip", GET /trips/{id} ->
+ *   "get-trip", GET /trips/{id}/blocks -> "list-trip-blocks". Nested reads
  *   and writes include the immediate parent, because every API nests list
  *   and get somewhere and parentless names collide constantly.
  *
  * Anything else falls back to the method+path concat, which can never fail
- * to produce a name — it can only produce a boring one.
+ * to produce a name - it can only produce a boring one.
  */
 export function analyzeRoute(method: string, path: string): RouteAnalysis {
   const segments = path.split("/").filter(Boolean);
@@ -290,11 +290,11 @@ export function analyzeRoute(method: string, path: string): RouteAnalysis {
   const droppedVersion = rest.length !== segments.length;
 
   // Walk the path once, keeping resource segments in order and noting where
-  // params sit between them — a param between two resources is what makes a
+  // params sit between them - a param between two resources is what makes a
   // name nested ("trips/{id}/blocks" is nested; "trips/{id}" is not).
   // A member word mid-path merges into its parent as a scope marker:
-  // "/users/me/stamps" is read as "current-user → stamps", not "users, me,
-  // stamps" — "me" names no resource of its own.
+  // "/users/me/stamps" is read as "current-user -> stamps", not "users, me,
+  // stamps" - "me" names no resource of its own.
   const resources: { phrase: string; nestedUnderMember: boolean }[] = [];
   let sawParam = false;
   for (const segment of rest) {
@@ -344,8 +344,8 @@ export function analyzeRoute(method: string, path: string): RouteAnalysis {
 
   // "batch" is a modifier, never the verb: "batch-trip-blocks" reads as a
   // tool about batching, not as blocks being written. The verb comes from
-  // the rest of the segment ("batch-delete" → "delete-media-batch") or from
-  // the method ("…/blocks/batch" → "update-trip-blocks-batch").
+  // the rest of the segment ("batch-delete" -> "delete-media-batch") or from
+  // the method (".../blocks/batch" -> "update-trip-blocks-batch").
   if (firstWord === "batch" && resources.length > 1) {
     const prev = resources[resources.length - 2] as (typeof resources)[number];
     const rest = last.phrase.split("-").slice(1).join("-");
@@ -374,7 +374,7 @@ export function analyzeRoute(method: string, path: string): RouteAnalysis {
 
   // Plain REST: the method supplies the verb, the path shape the noun.
   const verbs = METHOD_VERBS[method.toLowerCase()];
-  if (!verbs) return fallback; // HEAD, OPTIONS, WebDAV — honest concat.
+  if (!verbs) return fallback; // HEAD, OPTIONS, WebDAV - honest concat.
 
   // A trailing "all" scopes the parent collection rather than naming one:
   // "GET /pricing/all" is "list-all-pricing", never "get-all".
@@ -392,9 +392,9 @@ export function analyzeRoute(method: string, path: string): RouteAnalysis {
   }
 
   if (lastIsParam) {
-    // GET /trips/{id} → the member named by the last resource segment. Two
+    // GET /trips/{id} -> the member named by the last resource segment. Two
     // or more trailing params are a lookup by the last one:
-    // GET /trips/{username}/{slug} → "get-trip-by-slug".
+    // GET /trips/{username}/{slug} -> "get-trip-by-slug".
     const noun = lastParam
       ? `${singularPhrase(last.phrase)}-by-${lastParam}`
       : singularPhrase(last.phrase);
@@ -410,7 +410,7 @@ export function analyzeRoute(method: string, path: string): RouteAnalysis {
   }
 
   // A trailing resource word that reads plural is a collection; a singular
-  // one is a singleton sub-resource (GET /auth/session → "get-session").
+  // one is a singleton sub-resource (GET /auth/session -> "get-session").
   const member = !pluralize.isPlural(last.phrase.split("-").pop() as string);
   // POST with a trailing resource always creates one of it, whether the word
   // reads singular or plural: "create-trip-template", "create-trip-block".
@@ -460,7 +460,7 @@ export interface ResolvedNames {
  * Assign final names to a whole tool set.
  *
  * Route-derived names start minimal ("generate-story") and absorb parent
- * context on collision ("generate-trip-story") — minimal first because the
+ * context on collision ("generate-trip-story") - minimal first because the
  * short name is usually unique, deepening because a bare noun stops saying
  * which resource once a second API has one. Ties break in order: parent
  * context, grouping words kept in reserve ("admin" beats a number), the
@@ -555,7 +555,7 @@ export function resolveNames(inputs: NameInput[]): ResolvedNames {
     // Nobody can deepen. The declared name (or the first arrival) keeps the
     // spot; the rest take a method suffix, then a counter. A method suffix
     // that repeats the verb says nothing ("get-trip-get"), so those go
-    // straight to the counter — and the counter is always an error, because
+    // straight to the counter - and the counter is always an error, because
     // a numbered name means the spec needs a human's word, not our digit.
     for (const group of colliding) {
       const ordered = [...group].sort(

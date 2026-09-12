@@ -1,0 +1,97 @@
+---
+title: Working with your coding agent
+description: The generator writes the parts an API can describe. Your own agent writes the parts that need product knowledge, including journeys. Here is how to ask it.
+---
+
+## The generator and your agent do different jobs
+
+The generator is good at what the API contract already states: the method, the
+path, the types, the risk, the confirmation. It cannot know that "create a trip"
+on your site means *search for the place, set the dates, then confirm*, or that
+your product is a journal for trips people took rather than a planner for trips
+they might take.
+
+That knowledge lives with you, and your coding agent can help you write it down,
+if you give it the context the tool cannot.
+
+## The skill file
+
+Every `generate` run writes a skill file to your repo:
+
+```text
+.agents/skills/webmcp-tools/SKILL.md
+```
+
+It is the rules this tool expects, written for an agent to read: the naming
+rules, the character budgets, the description format, the exposure decisions,
+the execute contract, and the journey pattern. It is regenerated on every run,
+so it stays in step with the version you have.
+
+Agent tools discover it at that path: AGENTS.md, Claude Code, and the generic
+"skills" standard all look there. If your project has its own skill directory,
+skills stack, so your project rules sit on top of these.
+
+You do not have to do anything to activate it. A capable coding agent opens the
+repo, and the rules are in front of it. Your job is to ask for the right thing.
+
+There is a page of ready-to-use prompts for the recurring jobs in the
+[Prompt cookbook](/docs/prompt-cookbook). The rest of this page explains why
+they work and how to check the result.
+
+## What to give the agent
+
+Three things turn a vague request into a good tool or journey:
+
+1. **The product context.** What the site is, who uses it, and when in their
+life the action happens. This is the part the generator cannot see, and it is
+where wrong-but-plausible names come from.
+2. **A pointer to the skill file**, so the agent follows the naming, budget, and
+safety rules instead of inventing its own.
+3. **The existing generated tools**, so the agent composes them instead of
+re-implementing the API.
+
+## What to check when the agent is done
+
+An agent can be confidently wrong, especially about intent. Before you accept
+its work:
+
+- **Read the diff.** Did it edit inside a generated region? If so, ask it to
+  move the change to `.webmcp-codegen.json` instead, or it will be overwritten.
+- **Run `verify`.** It catches the mechanical mistakes: a description over
+  budget, a journey with no submit gate, a direct `fetch` that bypasses the
+  generated callers.
+- **Check the safety, not just the syntax.** A step tool should be a read. If a
+  step calls something that writes, the write is not behind the submit gate, and
+  the human confirmation is not in the path. Ask the agent to move it into the
+  submit.
+- **Check the name against your product.** A name can pass every mechanical
+  check and still be wrong for what the flow actually does. This is the one no
+  linter catches, and it is why the skill file keeps asking the agent to
+  understand the product first.
+
+<Callout type="warn">
+  A journey is only as safe as the code in it. The submit gate, the
+  confirmation, and the draft clearing live in the generator-owned
+  `journey.webmcp.ts` and cannot be edited away. A step's `call` and `run`, on
+  the other hand, are ordinary code. Keep writes in the submit.
+</Callout>
+
+## Do not let the agent decide exposure
+
+The agent can propose that a write be enabled. It should not do it on its own.
+Enabling a write is a human decision about what a model may do on your site
+while acting as your user. Keep that click.
+
+## Next
+
+<Cards>
+  <Card title="Journeys" href="/docs/journeys">
+    The multi-step primitive, end to end.
+  </Card>
+  <Card title="After you generate" href="/docs/after-you-generate">
+    The full loop, from reviewing the surface to watching it in CI.
+  </Card>
+  <Card title="Safety and the audit" href="/docs/safety">
+    How classification and withholding actually work.
+  </Card>
+</Cards>

@@ -2,7 +2,7 @@
  * webmcp-codegen public API.
  *
  * Most people only ever need `defineConfig`. Sources and outputs live
- * behind their own subpaths ("@webmcp-stack/codegen/sources", "…/outputs")
+ * behind their own subpaths ("@webmcp-stack/codegen/sources", ".../outputs")
  * so the top-level import stays small.
  */
 

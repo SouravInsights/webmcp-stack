@@ -8,7 +8,12 @@
 > tools that pipeline produces). Evidence:
 > `docs/research/2026-09-02-chrome-webmcp-docs-analysis.md`.
 >
-> Status: spec, not yet implemented. Ships after the generation pipeline (0.5).
+> Status: shipped in 0.9, but in a different shape than this early spec. The
+> config-declaration design below (a `journeys:` block) was never built.
+> What ships: TypeScript files under the tools output's `journeys/` folder that
+> import `createJourney` from the generator-owned `journey.webmcp.ts`, plus a
+> `verify` lint over those files. Kept for decision history; treat the config
+> block below as superseded.
 
 
 ## The problem

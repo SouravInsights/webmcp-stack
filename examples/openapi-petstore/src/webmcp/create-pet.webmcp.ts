@@ -1,6 +1,6 @@
-import { toolDisabled } from "./runtime.webmcp";
+import { callApi, toolDisabled } from "./runtime.webmcp";
 
-// ─── webmcp-codegen: generated. Do not edit this region. ───
+// --- webmcp-codegen: generated. Do not edit this region. ---
 /**
  * Add a new pet to the store. Returns the pet.
  *
@@ -36,13 +36,22 @@ export const createPetHints = {"readOnlyHint":false,"destructiveHint":false,"ide
 /** The tool definition, minus `execute` (which is yours, below the marker). */
 export const createPetTool = {
   name: "create-pet",
+  title: "Create Pet",
   description: "Add a new pet to the store. Returns the pet.",
   inputSchema: createPetInputSchema,
   annotations: {
     readOnlyHint: false,
     untrustedContentHint: true,
+    consequentialHint: false,
   },
 };
+
+/** The bare request, without the agent-facing result wrapping. Journeys
+ * and your own code compose this; executeCreatePet is the agent-facing one. */
+export async function fetchCreatePet(input: CreatePetInput, signal?: AbortSignal) {
+  const data = await callApi("/pets", { method: "POST", body: { name: input.name, tag: input.tag }, signal });
+  return data;
+}
 
 /**
  * Withheld: this tool is not registered, so agents cannot see or pick
@@ -84,7 +93,7 @@ export async function registerCreatePet(signal?: AbortSignal): Promise<void> {
   //   );
 }
 
-// ─── webmcp-codegen: end generated. Your code below survives regeneration. ───
+// --- webmcp-codegen: end generated. Your code below survives regeneration. ---
 
 /**
  * What actually happens when the agent calls "create-pet".
@@ -97,7 +106,7 @@ export async function registerCreatePet(signal?: AbortSignal): Promise<void> {
  * The user is asked to confirm every call (built into the generated region).
  */
 //
-// ⚠ webmcp-codegen flagged these response fields as likely PII: owner.email.
+// ! webmcp-codegen flagged these response fields as likely PII: owner.email.
 // Everything you return reaches the agent. Leave those fields out of what you
 // return unless the agent genuinely needs them, and say so in a comment if you keep them.
 export async function executeCreatePet(input: CreatePetInput) {

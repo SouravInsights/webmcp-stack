@@ -56,7 +56,7 @@ export function deref(schema: JsonSchema, spec: unknown): JsonSchema {
  * self-contained JSON Schema. The browser has no idea what
  * "#/components/schemas/Order" means, so refs must not survive codegen.
  *
- * Recursive models (Order → LineItem → Order) would loop forever, so a ref
+ * Recursive models (Order -> LineItem -> Order) would loop forever, so a ref
  * that points back to one of its own ancestors resolves to a plain object
  * with a note instead. The tool schema stays finite and honest.
  */
@@ -152,7 +152,7 @@ export function jsonSchemaToTs(schema: JsonSchema, spec: unknown): string {
   }
 }
 
-/** "get-order-status" → "GetOrderStatus" (for generated type names). */
+/** "get-order-status" -> "GetOrderStatus" (for generated type names). */
 export function pascalCase(name: string): string {
   return name
     .split(/[-_]/)

@@ -31,7 +31,7 @@ function termWidth(): number {
 }
 
 /**
- * The banner, printed once at the start of every command — a banner leads,
+ * The banner, printed once at the start of every command - a banner leads,
  * it never sits in the middle of a report. The full wordmark in cfonts
  * "tiny": solid block letters, small enough that webmcp-stack fits in 51
  * columns. The color is the site's accent (#58a6ff), on a real terminal
@@ -153,7 +153,7 @@ function wrapNames(names: string[], indent: string): string[] {
   return lines;
 }
 
-/** The default summary output — written for humans, not machines. */
+/** The default summary output - written for humans, not machines. */
 export function renderSummary(
   result: GenerateResult,
   setup: Setup,
@@ -171,7 +171,7 @@ export function renderSummary(
   console.log("");
 
   // What happened
-  console.log(`  ${c.green("✓")} ${bold(`${tools.length} tools generated`)}`);
+  console.log(`  ${c.green("ok")} ${bold(`${tools.length} tools generated`)}`);
   const parts = [`${enabled} ready to use`];
   if (withheld > 0) parts.push(`${withheld} withheld until you enable them`);
   if (gated > 0) parts.push(`${gated} visible but disabled`);
@@ -182,15 +182,15 @@ export function renderSummary(
   console.log("");
 
   // Blocking errors first, one line each, in red. They stop the write, and a
-  // red wall that says exactly what to fix beats a green ✓ that doesn't mean it.
+  // red wall that says exactly what to fix beats a green ok that doesn't mean it.
   const errorFindings = findings.filter((f) => f.level === "error");
   if (errorFindings.length > 0) {
     console.log(
-      `  ${c.red("✖")} ${bold(`${errorFindings.length} error${errorFindings.length === 1 ? "" : "s"}, nothing written`)}`,
+      `  ${c.red("x")} ${bold(`${errorFindings.length} error${errorFindings.length === 1 ? "" : "s"}, nothing written`)}`,
     );
     for (const f of errorFindings) {
       const where = f.tool ? dim(` (${f.tool})`) : "";
-      console.log(`  ${c.red("✖")} ${f.message}${where}`);
+      console.log(`  ${c.red("x")} ${f.message}${where}`);
     }
     console.log("");
   }
@@ -206,7 +206,7 @@ export function renderSummary(
     for (const group of groups) {
       const heading =
         group.heading.length > maxHeading
-          ? `${group.heading.slice(0, maxHeading - 1)}…`
+          ? `${group.heading.slice(0, maxHeading - 1)}...`
           : group.heading;
       console.log(dim(`    ${heading}`));
     }
@@ -216,9 +216,9 @@ export function renderSummary(
 
   // Where things went
   const outDir = setup.config.outputs[0]?.outDir ?? "src/webmcp";
-  console.log(`  ${c.cyan("→")} ${bold("Files")} ${outDir}`);
+  console.log(`  ${c.cyan("->")} ${bold("Files")} ${outDir}`);
   if (wiring && !wiring.alreadyWired) {
-    console.log(`  ${c.cyan("→")} ${bold("Registration")} wired into your app`);
+    console.log(`  ${c.cyan("->")} ${bold("Registration")} wired into your app`);
   }
   // Per-file notes (kept attributes, added names, unmatched controls). Capped
   // in the summary; --verbose lists them all.
@@ -227,31 +227,27 @@ export function renderSummary(
     console.log(dim(`    ${note}`));
   }
   if (fileNotes.length > 6) {
-    console.log(dim(`    …and ${fileNotes.length - 6} more (run with --verbose)`));
+    console.log(dim(`    ...and ${fileNotes.length - 6} more (run with --verbose)`));
+  }
+
+  // Pipeline proposals (groupings, renames): the run's "look at this" lines.
+  for (const note of result.notes.slice(0, 6)) {
+    console.log(`  ${c.cyan("-")} ${note}`);
+  }
+  if (result.notes.length > 6) {
+    console.log(dim(`    ...and ${result.notes.length - 6} more (run with --verbose)`));
   }
   console.log("");
-
-  // LLM proposals: visually distinct from findings (◦, cyan), because a
-  // suggestion is not a fact. Nothing here was applied to anything.
-  if (result.suggestions.length > 0) {
-    console.log(
-      `  ${c.cyan("◦")} ${bold(`${result.suggestions.length} LLM suggestion${result.suggestions.length === 1 ? "" : "s"}`)} ${dim("(proposals only; nothing applied)")}`,
-    );
-    for (const suggestion of result.suggestions) {
-      console.log(dim(`    ◦ ${suggestion.message}`));
-    }
-    console.log("");
-  }
 
   // Next step
   console.log(`  ${bold("Next:")} ${c.cyan("npx @webmcp-stack/codegen dev")}`);
   console.log(dim("  Review your tools, edit descriptions, test them live"));
   console.log("");
-  console.log(dim(`  Docs: https://webmcp-stack.vercel.app/docs`));
+  console.log(dim(`  Docs: https://webmcp.souravinsights.com/docs`));
   console.log("");
 }
 
-/** Verbose output — every tool, for when you want the full list. */
+/** Verbose output - every tool, for when you want the full list. */
 export function renderVerbose(result: GenerateResult, setup: Setup, _cwd: string): void {
   const { tools, findings, skipped } = result;
 
@@ -304,14 +300,14 @@ export function renderVerbose(result: GenerateResult, setup: Setup, _cwd: string
     for (const tool of group) {
       const description = tool.description || "(no description)";
       table.push([
-        tool.name.length > nameWidth ? `${tool.name.slice(0, nameWidth - 1)}…` : tool.name,
+        tool.name.length > nameWidth ? `${tool.name.slice(0, nameWidth - 1)}...` : tool.name,
         tool.enabledByDefault
           ? c.green("enabled")
           : tool.withheld
             ? dim("withheld")
             : dim("disabled"),
         description.length > descWidth - 2
-          ? `${description.slice(0, descWidth - 3)}…`
+          ? `${description.slice(0, descWidth - 3)}...`
           : description,
       ]);
     }
@@ -320,7 +316,7 @@ export function renderVerbose(result: GenerateResult, setup: Setup, _cwd: string
   }
 
   // Safety notes: grouped by what the person should do, with the affected
-  // tools listed compactly under each. 60 identical ⚠ lines teach nothing;
+  // tools listed compactly under each. 60 identical ! lines teach nothing;
   // 5 headed groups do.
   const errorFindings = findings.filter((f) => f.level === "error");
   const groups = groupFindings(findings);
@@ -329,25 +325,16 @@ export function renderVerbose(result: GenerateResult, setup: Setup, _cwd: string
     console.log("");
     for (const f of errorFindings) {
       const where = f.tool ? dim(` (${f.tool})`) : "";
-      console.log(`  ${c.red("✖")} ${f.message}${where}`);
+      console.log(`  ${c.red("x")} ${f.message}${where}`);
     }
     if (errorFindings.length > 0) console.log("");
     for (const group of groups) {
-      console.log(`  ${c.yellow("⚠")} ${group.heading}`);
+      console.log(`  ${c.yellow("!")} ${group.heading}`);
       for (const line of wrapNames(group.items, "      ")) {
         console.log(dim(line));
       }
       console.log("");
     }
-  }
-
-  // LLM proposals, visually distinct from findings.
-  if (result.suggestions.length > 0) {
-    console.log(bold("LLM suggestions (proposals only; nothing applied):"));
-    for (const suggestion of result.suggestions) {
-      console.log(`  ${c.cyan("◦")} ${dim(suggestion.message)}`);
-    }
-    console.log("");
   }
 
   const notes = result.files.flatMap((file) => file.notes ?? []);
@@ -360,6 +347,6 @@ export function renderVerbose(result: GenerateResult, setup: Setup, _cwd: string
   }
 
   console.log(dim(`Files: ${setup.config.outputs[0]?.outDir ?? "src/webmcp"}`));
-  console.log(dim(`Docs: https://webmcp-stack.vercel.app/docs`));
+  console.log(dim(`Docs: https://webmcp.souravinsights.com/docs`));
   console.log("");
 }

@@ -74,7 +74,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
     }
     .app.detail-open .main { transform: translateX(0); }
     .main .placeholder { display: none; }
-    /* The back control is a bare chevron — a tap target, not a button. It
+    /* The back control is a bare chevron - a tap target, not a button. It
        sits inline at the left of the title row, so no vertical space is
        spent on navigation. */
     .back-btn {
@@ -140,7 +140,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
     background: var(--surface);
   }
   /* The drag handle on the sidebar's right edge. Invisible until you
-     hover near it, then a 2px accent line — the Vercel/Linear idiom. */
+     hover near it, then a 2px accent line - the Vercel/Linear idiom. */
   .sidebar-resize {
     position: absolute;
     top: 0;
@@ -402,7 +402,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
   }
 
   /* The per-tool source disclosure: the generated file, revealed on demand.
-     A quiet row that expands into the code — the dashboard is the disclosure,
+     A quiet row that expands into the code - the dashboard is the disclosure,
      not a separate view. */
   .source-disclosure {
     margin-bottom: 28px;
@@ -753,7 +753,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
   ::-webkit-scrollbar-thumb:hover { background: var(--ghost); }
 
   /* Narrow-screen content density. This block comes after the base .detail
-     so it actually wins on source order — an earlier media query lost to the
+     so it actually wins on source order - an earlier media query lost to the
      desktop rule, which is why the padding never changed. */
   @media (max-width: 640px) {
     .detail { padding: 14px 16px; max-width: none; }
@@ -766,7 +766,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
       ? `
   /* Scoped mode: mounted inside a shadow root on the marketing site, where
      document-level selectors never match and vh/dvh would measure the page
-     viewport, not the host — which is exactly what clipped the demo's scroll
+     viewport, not the host - which is exactly what clipped the demo's scroll
      region before. This block comes LAST so it overrides the base rules:
      :host plays the body role and the app fills it, not the viewport. */
   :host {
@@ -784,7 +784,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
     position: relative;
     overflow: hidden;
   }
-  /* The demo's default sidebar width — narrower than the real dashboard's
+  /* The demo's default sidebar width - narrower than the real dashboard's
      320px, so the detail pane gets the room in the embedded frame. The drag
      handle sets an inline width, which still wins over this; the mobile
      full-width sidebar rule carries !important and is unaffected. */
@@ -815,7 +815,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
       <input type="text" class="search" id="search" placeholder="Search tools" spellcheck="false" />
     </div>
     <div class="tool-list" id="tool-list"></div>
-    <div class="sidebar-resize" id="sidebar-resize" title="Drag to resize · double-click to reset"></div>
+    <div class="sidebar-resize" id="sidebar-resize" title="Drag to resize - double-click to reset"></div>
   </aside>
   <main class="main" id="main">
     <div class="placeholder" id="placeholder">
@@ -826,7 +826,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
       </div>
       <p>Select a tool to view details</p>
       <p style="font-size: 12px; margin-top: 8px;">
-        <kbd>↑</kbd> <kbd>↓</kbd> to navigate &nbsp;·&nbsp; <kbd>⌘K</kbd> to search
+        <kbd>Up</kbd> <kbd>Down</kbd> to navigate &nbsp;-&nbsp; <kbd>CmdK</kbd> to search
       </p>
     </div>
     <div class="detail" id="detail" hidden></div>
@@ -960,7 +960,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     ].filter(Boolean).join("");
 
     var findings = (tool.findings || []).map(function (finding) {
-      var icon = finding.level === "error" ? "✖" : "⚠";
+      var icon = finding.level === "error" ? "x" : "!";
       return '<div class="finding ' + finding.level + '"><span class="finding-icon">' + icon + "</span><span>" + esc(finding.message) + "</span></div>";
     }).join("");
 
@@ -1050,7 +1050,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       '<button class="btn btn-primary" id="save-desc">Save</button>' +
       '<span class="saved-indicator" id="saved">Saved</span>' +
       "</div>" +
-      '<div class="edit-hint">Agents pick tools by this text. Saved to .webmcp-codegen.json, so it survives regeneration. ⌘S to save.</div>' +
+      '<div class="edit-hint">Agents pick tools by this text. Saved to .webmcp-codegen.json, so it survives regeneration. CmdS to save.</div>' +
       "</div>" +
 
       (fieldRows
@@ -1079,7 +1079,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
           '<div class="try-header"><h3>Run this tool</h3><span class="try-note">server-side, no browser session</span></div>' +
           '<div class="try-body">' +
           (tool.requiresAuth
-            ? '<div class="auth-note">⚠ This endpoint requires a browser session. The dashboard runs server-side, so you will get a 401. Test it in Chrome DevTools where you are signed in.</div>'
+            ? '<div class="auth-note">! This endpoint requires a browser session. The dashboard runs server-side, so you will get a 401. Test it in Chrome DevTools where you are signed in.</div>'
             : "") +
           '<input class="base-url-input" id="base-url" type="text" placeholder="Base URL (e.g. http://localhost:3000)" value="' + esc(baseUrl) + '" spellcheck="false" />' +
           (fields || '<div style="color: var(--faint); font-size: 13px; margin-bottom: 14px;">This tool takes no inputs.</div>') +
@@ -1235,7 +1235,7 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
     }
     if ((event.metaKey || event.ctrlKey) && event.key === "s") {
       event.preventDefault();
-      // ⌘S saves whatever is being edited: an open field row, else the
+      // CmdS saves whatever is being edited: an open field row, else the
       // tool description.
       if (document.getElementById("field-edit-input")) saveFieldEdit();
       else saveDescription();

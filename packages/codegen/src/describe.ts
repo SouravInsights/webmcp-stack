@@ -13,6 +13,13 @@
  *   - Append, never replace. Author text (a spec description, a `.describe()`)
  *     stays verbatim; synthesized constraints follow it. The author's words are
  *     always the better text.
+ *   - Bound the machine's words, never the author's. Chrome's 500/150 budgets
+ *     are authoring guidance, not spec rules (the browser only rejects an
+ *     empty description or a name outside 1-128 chars). So machine-drafted
+ *     text is composed to fit the budget by construction, and author text is
+ *     never silently shortened. If author text runs long, verify warns and
+ *     the developer decides; losing half a sentence to a character counter is
+ *     worse than a description that is a few characters over.
  *   - Only fill silence. A field with no text at all gets a draft built from
  *     its name, type, and constraints, and that field is marked as
  *     machine-written so the audit can see it. Machine text is a floor, not a
@@ -21,12 +28,46 @@
  *     audit is only meaningful if a CI run is reproducible.
  *
  * This module covers layers 1-3 of the assembly order (source text, merge,
- * synthesis). Layer 4 (LLM drafts) is advisory and lives in llm.ts; layer 5
- * (overrides) lives in the pipeline's override step, applied last so it wins.
+ * synthesis). Overrides live in the pipeline's override step, applied last
+ * so they always win.
  */
 
 import pluralize from "pluralize";
 import type { CandidateTool, JsonSchema } from "./types.js";
+
+/** Chrome's published description budgets: 500 per tool, 150 per parameter. */
+export const TOOL_DESCRIPTION_MAX = 500;
+export const FIELD_DESCRIPTION_MAX = 150;
+
+/** The ASCII cut marker; fit functions reserve its length before slicing. */
+const ELLIPSIS = "...";
+
+/**
+ * Fit machine-drafted text to a character budget. A text that fits passes
+ * through untouched. One that overflows is cut at the last sentence boundary
+ * that keeps at least half the budget (a cut near the end keeps the thought,
+ * at the price of trailing sentences); otherwise it hard-cuts at a word
+ * boundary and ends with an ellipsis. The ellipsis is reserved inside the
+ * budget, so the result never exceeds it, even for a single unbroken token.
+ *
+ * Only call this on text this module generated. Author text is left alone
+ * on purpose (see the module comment).
+ */
+export function fitBudget(text: string, budget: number): string {
+  if (text.length <= budget) return text;
+  // Reserve room for the cut marker, so the result can never come back over
+  // budget when there is no space to cut at.
+  const slice = text.slice(0, budget - ELLIPSIS.length);
+  const sentenceEnd = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? "),
+  );
+  if (sentenceEnd >= Math.floor(budget / 2)) return slice.slice(0, sentenceEnd + 1);
+  const wordEnd = slice.lastIndexOf(" ");
+  const body = wordEnd > 0 ? slice.slice(0, wordEnd) : slice;
+  return `${body.trimEnd()}${ELLIPSIS}`;
+}
 
 /**
  * Render a schema's constraints as plain-language sentences, or "" when there
@@ -154,7 +195,7 @@ function alreadyStatesConstraints(text: string, schema: JsonSchema): boolean {
   return values.length > 0 && values.every((value) => text.includes(value));
 }
 
-/** "purchaseDate" / "purchase_date" / "purchase-date" → "Purchase date".
+/** "purchaseDate" / "purchase_date" / "purchase-date" -> "Purchase date".
  *  Sentence case, matching the field text in Chrome's WebMCP examples; these
  *  are machine drafts that the audit flags, not final copy. */
 function humanizeFieldName(name: string): string {
@@ -192,7 +233,7 @@ function patternSentence(name: string, schema: JsonSchema, noun?: string): strin
   if (last === "url" && subject) return `The URL of the ${subject}.`;
   if (last === "at" && words.length > 1) {
     // The stem's last word is the event ("captured"); anything before it is
-    // what it happened to ("email verified at" → the email).
+    // what it happened to ("email verified at" -> the email).
     const happenedTo = words.slice(0, -2).join(" ") || noun;
     if (happenedTo) return `When the ${happenedTo} was ${words[words.length - 2]}.`;
   }
@@ -205,7 +246,7 @@ function patternSentence(name: string, schema: JsonSchema, noun?: string): strin
 }
 
 /**
- * The noun a tool acts on, from its name: "create-trip" → "trip". Our own
+ * The noun a tool acts on, from its name: "create-trip" -> "trip". Our own
  * naming rules put the verb first, so the next segment that means something
  * is the noun. Only a fallback subject for pattern sentences.
  */
@@ -256,34 +297,50 @@ export function describeField(
   const authorText = raw && !isStubDescription(raw) ? raw : "";
   const constraints = describeConstraints(schema);
 
+  let result: { description: string; synthesized: boolean };
+
   if (authorText) {
     const needsConstraints = constraints && !alreadyStatesConstraints(authorText, schema);
-    return {
+    result = {
       description: needsConstraints ? `${authorText} ${constraints}` : authorText,
       synthesized: false,
     };
+  } else {
+    // A conventional name ("tripId", "coverImageUrl") reads as a real sentence;
+    // that beats the bare humanized name because it says what the name only
+    // hints at. Anything else gets the name plus whatever the schema proves.
+    const nameText = humanizeFieldName(name);
+    const pattern = patternSentence(name, schema, context?.noun);
+    if (pattern) {
+      const suffix = constraints || FORMAT_SENTENCES[schema.format ?? ""] || "";
+      result = { description: suffix ? `${pattern} ${suffix}` : pattern, synthesized: true };
+    } else {
+      const format = FORMAT_SENTENCES[schema.format ?? ""];
+      // "Email. An email address." says one thing twice: when the format sentence
+      // already carries the noun, it is the draft on its own.
+      if (
+        format &&
+        constraints === format &&
+        format.toLowerCase().includes(nameText.toLowerCase())
+      ) {
+        result = { description: format, synthesized: true };
+      } else {
+        const draft =
+          format && !constraints
+            ? `${nameText} (${format.replace(/^An?\s+/i, "").replace(/\.$/, "")}).`
+            : `${nameText}.${constraints ? ` ${constraints}` : ""}`;
+        result = { description: draft, synthesized: true };
+      }
+    }
   }
 
-  // A conventional name ("tripId", "coverImageUrl") reads as a real sentence;
-  // that beats the bare humanized name because it says what the name only
-  // hints at. Anything else gets the name plus whatever the schema proves.
-  const nameText = humanizeFieldName(name);
-  const pattern = patternSentence(name, schema, context?.noun);
-  if (pattern) {
-    const suffix = constraints || FORMAT_SENTENCES[schema.format ?? ""] || "";
-    return { description: suffix ? `${pattern} ${suffix}` : pattern, synthesized: true };
+  // Only machine-drafted text is composed to fit the budget. Author text is
+  // preserved in full; verify warns on it instead of this layer silently
+  // dropping the author's words.
+  if (result.synthesized) {
+    result.description = fitBudget(result.description, FIELD_DESCRIPTION_MAX);
   }
-  const format = FORMAT_SENTENCES[schema.format ?? ""];
-  // "Email. An email address." says one thing twice: when the format sentence
-  // already carries the noun, it is the draft on its own.
-  if (format && constraints === format && format.toLowerCase().includes(nameText.toLowerCase())) {
-    return { description: format, synthesized: true };
-  }
-  const draft =
-    format && !constraints
-      ? `${nameText} (${format.replace(/^An?\s+/i, "").replace(/\.$/, "")}).`
-      : `${nameText}.${constraints ? ` ${constraints}` : ""}`;
-  return { description: draft, synthesized: true };
+  return result;
 }
 
 /**
@@ -380,7 +437,7 @@ const PHRASAL_VERBS = new Set(["sign-up", "sign-in", "sign-out", "log-in", "log-
 
 function returnShapeSentence(toolName: string, output: JsonSchema): string {
   const words = toolName.split("-");
-  // The noun is what the verb leaves behind — and a phrasal verb is two words.
+  // The noun is what the verb leaves behind - and a phrasal verb is two words.
   const firstTwo = words.slice(0, 2).join("-");
   const nounWords = PHRASAL_VERBS.has(firstTwo) ? words.slice(2) : words.slice(1);
   const nounPhrase = nounWords.join(" ").replace(/ by \w+$/, "");
@@ -415,7 +472,11 @@ export function describeCandidateTool(candidate: CandidateTool): void {
     const returns = candidate.outputSchema
       ? returnShapeSentence(candidate.name, candidate.outputSchema)
       : "";
-    candidate.description = [sentence, returns].filter(Boolean).join(" ");
+    // No author text existed, so this is ours to compose: fit it.
+    candidate.description = fitBudget(
+      [sentence, returns].filter(Boolean).join(" "),
+      TOOL_DESCRIPTION_MAX,
+    );
     candidate.descriptionSource = "generated-template";
     return;
   }
@@ -427,5 +488,7 @@ export function describeCandidateTool(candidate: CandidateTool): void {
       : "";
   // The join is between sentences: the base earns its period first.
   const base = returns && !/[.!?]$/.test(normalized) ? `${normalized}.` : normalized;
+  // Author text plus a machine return sentence. The author's half is not
+  // shortened; verify warns if the total runs past the budget.
   candidate.description = [base, returns].filter(Boolean).join(" ");
 }

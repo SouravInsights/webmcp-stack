@@ -69,7 +69,7 @@ function isStandardSchema(value: unknown): value is StandardSchemaV1 {
 /**
  * TypeBox v1 schemas are JSON Schema documents, not wrapper objects: the value
  * has `type` and `properties` and no `~standard`. This is the only check that
- * does not lie about what TypeBox is — there is no vendor marker to read.
+ * does not lie about what TypeBox is - there is no vendor marker to read.
  */
 function isTypeBoxSchema(value: unknown): value is JsonSchema {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -159,7 +159,7 @@ function toJsonSchema(
   anchorDir: string,
 ): JsonSchema {
   // TypeBox schemas are JSON Schema already: `Type.Object({...})` returns the
-  // draft-2020-12 shape with no wrapper. Detected by shape, not a marker —
+  // draft-2020-12 shape with no wrapper. Detected by shape, not a marker -
   // TypeBox v1 has no `~standard` and no `_def`; the object is the contract.
   if (isTypeBoxSchema(value)) {
     return value;
@@ -229,38 +229,4 @@ function toJsonSchema(
         "Install it in the package that owns your schemas (the one your codegen.config.mjs sits in).",
     );
   }
-}
-
-/**
- * `generate --suggest` support: filter a module's exports to Standard Schemas
- * and convert each to JSON Schema text for the proposal prompt. Lives next to
- * the source so the conversion rules exist exactly once. Exports that are not
- * schemas are skipped silently (a module may export anything); exports that
- * look like schemas but fail conversion are reported, never silent.
- */
-export function schemaExportsToJson(
-  moduleExports: Record<string, unknown>,
-  anchorDir: string,
-): {
-  schemas: { name: string; schemaText: string }[];
-  skipped: { name: string; reason: string }[];
-} {
-  const schemas: { name: string; schemaText: string }[] = [];
-  const skipped: { name: string; reason: string }[] = [];
-  for (const [name, value] of Object.entries(moduleExports)) {
-    // Standard Schema (zod/valibot/arktype) carries a `~standard` marker;
-    // TypeBox is a bare JSON-Schema object. Both are valid — this loader was
-    // the one place that only accepted the marker, which is why TypeBox
-    // modules silently yielded nothing.
-    if (!isStandardSchema(value) && !isTypeBoxSchema(value)) continue;
-    try {
-      schemas.push({
-        name,
-        schemaText: JSON.stringify(toJsonSchema(value, name, "schema", anchorDir)),
-      });
-    } catch (error) {
-      skipped.push({ name, reason: error instanceof Error ? error.message : String(error) });
-    }
-  }
-  return { schemas, skipped };
 }

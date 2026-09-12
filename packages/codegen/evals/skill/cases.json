@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "comment": "The skill-file eval set. Each case: a prompt, an agent run against a fresh copy of fixture/, deterministic checks on the result. See README.md.",
+  "agent_cmd_default": "codex exec --json \"{PROMPT}\"",
+  "trials_default": 3,
+  "cases": [
+    {
+      "id": "trigger-new-read-tool",
+      "kind": "core",
+      "prompt": "Add a webmcp tool that lets agents look up the current weather for a city.",
+      "checks": [
+        {
+          "type": "any-file-matches",
+          "dir": "src/webmcp",
+          "all": [
+            "name: \"(get|search|check|lookup)-[a-z-]*weather[a-z-]*\"",
+            "readOnlyHint: true",
+            "registerTool\\("
+          ],
+          "none": ["\\bfetch\\s*\\(\\s*[\"'`]https?://(?!/v1/)"]
+        }
+      ]
+    },
+    {
+      "id": "journey-document-trip",
+      "kind": "core",
+      "comment": "The sharpest fixture: retrospective naming is right, plan/book is auto-fail.",
+      "prompt": "Look at the webmcp tools in this repo. Creating a trip needs a resolved locationObject from the place search, and the human must confirm before anything is created. Write the journey for this flow.",
+      "checks": [
+        {
+          "type": "any-file-matches",
+          "dir": "src/webmcp/journeys",
+          "all": ["createJourney\\(", "submit", "\"(document|record|log|write|capture)-trip\""],
+          "none": ["\"(plan|book)-trip\"", "\\bfetch\\s*\\("]
+        }
+      ]
+    },
+    {
+      "id": "enable-withheld-write",
+      "kind": "core",
+      "prompt": "Enable the create-trip tool so agents can use it.",
+      "checks": [
+        { "type": "marker-preserved", "path": "src/webmcp/create-trip.webmcp.ts" },
+        {
+          "type": "file-matches",
+          "path": "src/webmcp/create-trip.webmcp.ts",
+          "all": ["\\n  await modelContext\\.registerTool\\(", "requestUserConfirmation"],
+          "none": []
+        }
+      ]
+    },
+    {
+      "id": "improve-description",
+      "kind": "core",
+      "comment": "Descriptions live in the generated region (do-not-edit) or the overrides file - the skill teaches overrides, so the marker must survive either way.",
+      "prompt": "The create-trip description doesn't tell agents what comes back. Improve it.",
+      "checks": [
+        {
+          "type": "any-of",
+          "checks": [
+            {
+              "type": "file-matches",
+              "path": ".webmcp-codegen.json",
+              "all": ["create-trip", "description"],
+              "none": []
+            },
+            { "type": "marker-preserved", "path": "src/webmcp/create-trip.webmcp.ts" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lazy-prompt-quality",
+      "kind": "core",
+      "prompt": "make my webmcp tools good",
+      "checks": [
+        {
+          "type": "tool-description-budget",
+          "dir": "src/webmcp",
+          "max_tool": 500,
+          "max_param": 150
+        },
+        { "type": "marker-preserved", "path": "src/webmcp/create-trip.webmcp.ts" }
+      ]
+    },
+    {
+      "id": "negative-typo",
+      "kind": "negative",
+      "prompt": "Fix the typo in README-APP.md",
+      "checks": [
+        { "type": "file-matches", "path": "README-APP.md", "all": [], "none": ["\\bteh\\b"] },
+        { "type": "no-webmcp-diff" }
+      ]
+    },
+    {
+      "id": "negative-unit-test",
+      "kind": "negative",
+      "prompt": "Write a small unit test for a date-formatting helper (tests/format.test.ts).",
+      "checks": [{ "type": "no-webmcp-diff" }]
+    },
+    {
+      "id": "negative-dark-mode",
+      "kind": "negative",
+      "prompt": "Add a dark-mode toggle to the settings page.",
+      "checks": [{ "type": "no-webmcp-diff" }]
+    },
+    {
+      "id": "journey-without-skill",
+      "kind": "control",
+      "comment": "Same prompt as journey-document-trip with the skill REMOVED. Informational: if this starts passing reliably, models absorbed the practices and the skill can retire.",
+      "skill": false,
+      "prompt": "Look at the webmcp tools in this repo. Creating a trip needs a resolved locationObject from the place search, and the human must confirm before anything is created. Write the journey for this flow.",
+      "checks": [
+        {
+          "type": "any-file-matches",
+          "dir": "src/webmcp/journeys",
+          "all": ["createJourney\\(", "submit", "\"(document|record|log|write|capture)-trip\""],
+          "none": ["\"(plan|book)-trip\"", "\\bfetch\\s*\\("]
+        }
+      ]
+    }
+  ]
+}

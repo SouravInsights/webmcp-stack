@@ -43,7 +43,7 @@ actually use. Use `safety.exclude` in the config for whole families (`["internal
 
 The generated tools register on page load. To watch that happen:
 
-- **Chrome:** turn on `chrome://flags/#enable-webmcp-testing` (Chrome 146+) and reload.
+- **Chrome:** turn on `chrome://flags/#enable-webmcp-testing` (Chrome 149+; production sites join the WebMCP origin trial) and reload.
   The *Model Context Tool Inspector* extension shows the registered tools and lets you
   invoke them by hand.
 - **Other browsers:** add the WebMCP polyfill to your page; the same registration code
@@ -51,20 +51,6 @@ The generated tools register on page load. To watch that happen:
 - **No browser at all:** `npx @webmcp-stack/codegen dev` runs any tool directly from the
   dashboard (server-side, so without your browser session; auth'd endpoints will answer
   accordingly).
-
-## The dashboard
-
-```bash
-npx @webmcp-stack/codegen dev
-```
-
-![The webmcp-codegen dashboard](/images/dev-server-dashboard.png)
-
-A local control panel for the generated tools: browse and search them grouped by risk
-level, see each one's route and audit findings, edit descriptions, toggle tools on and
-off, and run them directly. Edits are written to `.webmcp-codegen.json` as overrides, so
-they survive regeneration and can be committed. The dashboard never touches your app: it
-is a localhost page served by the CLI, gone when you Ctrl+C.
 
 ## CI
 

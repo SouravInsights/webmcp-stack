@@ -8,7 +8,7 @@
  * shows is what a generate run would write.
  *
  * It exists only while the command is running, listens on localhost only,
- * and nothing about it ever touches the user's app bundle — by design, so
+ * and nothing about it ever touches the user's app bundle - by design, so
  * this dev tool can never leak into production.
  */
 
@@ -200,7 +200,7 @@ function toUiTool(
       ? `schema: ${tool.source.ref}`
       : "";
   // The dry run already holds every file's contents in memory, so the
-  // dashboard can show the real generated source per tool — the same
+  // dashboard can show the real generated source per tool - the same
   // progressive disclosure the site's demo has, against live output.
   const file = files.find((f) => basename(f.path) === `${tool.name}.webmcp.ts`);
   return {
@@ -233,7 +233,7 @@ function toUiTool(
  * The direct "run it" test: call the endpoint the way the generated
  * execute() would, but server-side. Two honest limitations the UI states:
  * there is no browser session here (auth cookies do not apply), and the
- * call needs an absolute base URL — the spec's servers entry or one the
+ * call needs an absolute base URL - the spec's servers entry or one the
  * developer types in.
  */
 async function runEndpoint(

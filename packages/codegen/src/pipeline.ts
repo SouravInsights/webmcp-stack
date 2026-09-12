@@ -1,5 +1,5 @@
 /**
- * The pipeline: sources → normalize → safety review → audit → write.
+ * The pipeline: sources -> normalize -> safety review -> audit -> write.
  *
  * This module is the only place the stages meet. It owns no opinions of its
  * own; naming, safety, and file formats all live in their own modules. It
@@ -10,8 +10,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { describeCandidateInputs, describeCandidateTool } from "./describe.js";
+import { groupHandshakes } from "./group.js";
 import { pascalCase } from "./json-schema.js";
-import { runLlmLayer } from "./llm.js";
 import { mergeSchemaWithOperations } from "./merge.js";
 import { resolveNames } from "./naming.js";
 import { auditTools, reviewTools } from "./safety.js";
@@ -19,7 +19,6 @@ import type {
   AuditFinding,
   CodegenConfig,
   GeneratedFile,
-  LlmSuggestion,
   ReviewedTool,
   SkippedEndpoint,
   ToolOverrides,
@@ -41,7 +40,7 @@ export interface GenerateOptions {
    */
   overrides?: ToolOverrides;
   /**
-   * The names the last run produced (name → route ref), from the same file.
+   * The names the last run produced (name -> route ref), from the same file.
    * When a route's name changes between runs, the rename is reported and the
    * tool's overrides move with it: a rename is a report line, never a silent
    * break.
@@ -59,14 +58,9 @@ export interface GenerateResult {
   files: GeneratedFile[];
   /** Human-facing pipeline notes, e.g. "stripped the shared v1 prefix". */
   notes: string[];
-  /**
-   * Advisory proposals from the LLM layer (`◦` lines in the report). Empty
-   * unless the layer is explicitly configured; never applied to files.
-   */
-  suggestions: LlmSuggestion[];
-  /** Names that changed since the last run (old → new), overrides re-keyed. */
+  /** Names that changed since the last run (old -> new), overrides re-keyed. */
   crossRenames: { from: string; to: string }[];
-  /** The names this run produced (name → route ref), for the caller to save. */
+  /** The names this run produced (name -> route ref), for the caller to save. */
   namesLedger: Record<string, string>;
   /** Overrides with renamed tools re-keyed, when a rename moved any. */
   migratedOverrides?: ToolOverrides;
@@ -131,15 +125,23 @@ export async function runGenerate(
     progress(`Renamed ${renames.length} tool${renames.length === 1 ? "" : "s"} for uniqueness`);
   }
 
+  // 4.5 Grouping: handshake endpoints (request-upload + complete-upload) are
+  //     one action the API split into two calls. The merged tool is a
+  //     withheld draft exactly like its members; the report names the
+  //     proposal, and adopting it is enabling it. Members stay untouched.
+  const grouped = groupHandshakes(named);
+  notes.push(...grouped.notes);
+  const groupedTools = grouped.tools;
+
   // Cross-run renames. The route ref is the durable identity; the name is
   // derived. When they drift apart (a better algorithm, a spec edit), the
   // tool's dashboard overrides are keyed by the old name and would silently
-  // stop applying — so they are re-keyed here, before step 6 reads them.
+  // stop applying - so they are re-keyed here, before step 6 reads them.
   const refOf = (tool: (typeof named)[number]): string => tool.endpointRef ?? tool.source.ref;
   const crossRenames: { from: string; to: string }[] = [];
   if (options.previousNames) {
     const nameByRef = new Map(Object.entries(options.previousNames).map(([n, r]) => [r, n]));
-    for (const tool of named) {
+    for (const tool of groupedTools) {
       const before = nameByRef.get(refOf(tool));
       if (before && before !== tool.name) crossRenames.push({ from: before, to: tool.name });
     }
@@ -159,12 +161,12 @@ export async function runGenerate(
       `${crossRenames.length} tool${crossRenames.length === 1 ? "" : "s"} renamed since the last run; their dashboard edits moved with them`,
     );
   }
-  const namesLedger = Object.fromEntries(named.map((tool) => [tool.name, refOf(tool)]));
+  const namesLedger = Object.fromEntries(groupedTools.map((tool) => [tool.name, refOf(tool)]));
 
   // 5. Safety review: classify side effects, compute hints, scan for PII,
   //    apply endpoint roles and config exclusions. Webhooks never come back.
   progress("Reviewing safety (classification, PII, auth)");
-  const { tools, skipped } = reviewTools(named, config.safety);
+  const { tools, skipped } = reviewTools(groupedTools, config.safety);
   const authCount = tools.filter((t) => t.endpointRole === "auth").length;
   const adminCount = tools.filter((t) => t.endpointRole === "admin").length;
   if (authCount > 0) progress(`Disabled ${authCount} auth endpoint${authCount === 1 ? "" : "s"}`);
@@ -233,7 +235,7 @@ export async function runGenerate(
           level: "warning" as const,
           tool: rename.to,
           message:
-            `Renamed "${rename.from}" → "${rename.to}" since the last run. ` +
+            `Renamed "${rename.from}" -> "${rename.to}" since the last run. ` +
             "Dashboard edits moved with it; update any code that imported the old name.",
         })),
         ...formFindings,
@@ -255,7 +257,6 @@ export async function runGenerate(
       findings,
       files: [],
       notes,
-      suggestions: [],
       crossRenames,
       namesLedger,
       migratedOverrides,
@@ -263,12 +264,6 @@ export async function runGenerate(
       wrote: false,
     };
   }
-
-  // 7b. The advisory LLM layer runs after the audit so its relationship
-  //     proposals can react to findings, and before outputs so a slow endpoint
-  //     never sits between the developer and their files. It only proposes:
-  //     report lines, never writes, never exit codes.
-  const suggestions = await runLlmLayer(config, { tools, findings });
 
   // 8. Run the outputs, then write the files (unless this is a dry run).
   //    Tools with a form pointer belong to the form output; without one
@@ -316,7 +311,6 @@ export async function runGenerate(
     findings,
     files,
     notes,
-    suggestions,
     crossRenames,
     namesLedger,
     migratedOverrides,

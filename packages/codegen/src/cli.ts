@@ -19,19 +19,18 @@
  */
 
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import * as clack from "@clack/prompts";
 import { dim, printBanner, renderSummary } from "./cli-output.js";
-import { CONFIG_FILE_NAMES, loadConfig } from "./config.js";
+import { CONFIG_FILE_NAMES } from "./config.js";
 import { loadDataFile, saveDataFile } from "./data-file.js";
 import { findSpecs } from "./detect.js";
-import { findSchemaLibraries, findSchemaModules, findWebApps } from "./detect-app.js";
+import { findSchemaLibraries, findWebApps } from "./detect-app.js";
 
 // Node prints an ExperimentalWarning the first time it type-strips a .ts
-// module (which --suggest does to load user schemas). That warning is Node
+// module (loading a user's codegen.config.ts or schema modules). That warning is Node
 // talking about its own internals, not something the developer can act on,
 // so it never belongs in our output.
 const realEmitWarning = process.emitWarning.bind(process);
@@ -43,17 +42,20 @@ process.emitWarning = ((warning: unknown, ...rest: unknown[]) => {
 }) as typeof process.emitWarning;
 
 import { startDevServer } from "./dev/server.js";
-import { hostedLlmProvider, resolveLlmProvider, runLlmLayer } from "./llm.js";
 import { debug, enableVerbose, error, info, success, warn } from "./logger.js";
 import { runGenerate } from "./pipeline.js";
 import { resolveSetup } from "./setup.js";
-import { schemaExportsToJson } from "./sources/schema.js";
-import type { CodegenConfig } from "./types.js";
-import { verifyTools, verifyUrl } from "./verify.js";
+import {
+  countJourneyTools,
+  type JourneyFileInput,
+  verifyJourneyFiles,
+  verifyTools,
+  verifyUrl,
+} from "./verify.js";
 import { applyWiring, planWiring, type WirePlan } from "./wire.js";
 
 const HELP = `
-webmcp-codegen — generate WebMCP tools from your OpenAPI spec
+webmcp-codegen - generate WebMCP tools from your OpenAPI spec
 
 Usage
   npx @webmcp-stack/codegen [command] [flags]
@@ -71,8 +73,6 @@ Flags
   --verbose      Show every tool, not just the summary
   --force        Write files even when the audit reports errors
   --skip-audit   Skip the safety report
-  --suggest     Ask the LLM layer which of your schemas are worth declaring
-  --llm         Improve the names and descriptions of the tools being generated (LLM)
   --url URL      With verify: also check the deployed page is live for visitors
   --config PATH  Use a config file at PATH
   --port N       Dashboard port (default: 4700)
@@ -85,7 +85,7 @@ Examples
   npx @webmcp-stack/codegen generate --verbose    # see all 72 tools listed
 
 Docs
-  https://webmcp-stack.vercel.app/docs
+  https://webmcp.souravinsights.com/docs
 `;
 
 export interface CliFlags {
@@ -98,10 +98,6 @@ export interface CliFlags {
   spec?: string;
   out?: string;
   port?: number;
-  /** `generate --llm`: polish the generated tools' descriptions and names. */
-  llm?: boolean;
-  /** `generate --suggest`: LLM proposals for undeclared schemas. */
-  suggest?: boolean;
   /** `verify --url <deployed-url>`: also check the page is live for visitors. */
   url?: string;
   help: boolean;
@@ -121,8 +117,6 @@ async function main(): Promise<number> {
       spec: { type: "string" },
       out: { type: "string" },
       port: { type: "string" },
-      suggest: { type: "boolean" },
-      llm: { type: "boolean" },
       url: { type: "string" },
       help: { type: "boolean", default: false },
     },
@@ -138,8 +132,6 @@ async function main(): Promise<number> {
     spec: values.spec,
     out: values.out,
     port: values.port ? Number.parseInt(values.port, 10) : undefined,
-    suggest: values.suggest,
-    llm: values.llm,
     url: values.url,
     help: values.help,
   };
@@ -161,7 +153,7 @@ async function main(): Promise<number> {
     case "verify":
       return verify(flags);
     case "generate":
-      return flags.suggest ? suggest() : generate(flags);
+      return generate(flags);
     default:
       error(`Unknown command: ${command}`);
       info(HELP);
@@ -224,7 +216,7 @@ async function init(): Promise<number> {
     info("schemas; see the commented block in the config.");
   }
   info("\nEdit it to add sources, change the output directory, or set safety options.");
-  info("Docs: https://webmcp-stack.vercel.app/docs/configuration\n");
+  info("Docs: https://webmcp.souravinsights.com/docs/configuration\n");
   return 0;
 }
 
@@ -319,164 +311,9 @@ async function dev(port: number): Promise<number> {
 }
 
 /**
- * Resolve the LLM provider for an explicit opt-in (--llm / --suggest). With a
- * configured key this returns it silently; without one, an interactive
- * terminal offers the hosted tier / own key / skip. Non-interactive runs
- * (CI) get undefined, because a prompt can never block a pipeline. Both LLM
- * flags share this so the chooser is identical everywhere.
- */
-async function resolveProviderForOptIn(
-  llm: CodegenConfig["llm"],
-): Promise<ReturnType<typeof resolveLlmProvider>> {
-  const configured = resolveLlmProvider(llm ?? {});
-  if (configured) return configured;
-  if (!process.stdout.isTTY) {
-    info(
-      "\n◦ The LLM layer is off: no provider configured and no WEBMCP_LLM_API_KEY / " +
-        "OPENAI_API_KEY in the environment. Nothing proposed.\n",
-    );
-    return undefined;
-  }
-  const choice = await clack.select({
-    message: "The LLM layer needs an API key. How do you want to proceed?",
-    options: [
-      {
-        value: "hosted",
-        label: "Use the free hosted tier",
-        hint: "webmcp-stack's shared key, rate-limited",
-      },
-      {
-        value: "own",
-        label: "Enter my own API key",
-        hint: "OpenRouter, OpenAI, or any OpenAI-compatible provider",
-      },
-      { value: "skip", label: "Skip", hint: "run without LLM features" },
-    ],
-  });
-  if (clack.isCancel(choice) || choice === "skip") {
-    info("\n◦ Skipped. Nothing proposed.\n");
-    return undefined;
-  }
-  if (choice === "hosted") return hostedLlmProvider();
-  const key = await clack.password({
-    message: "Paste your API key (input is hidden):",
-    validate: (value) =>
-      !value || value.trim().length === 0 ? "The key cannot be empty." : undefined,
-  });
-  if (clack.isCancel(key)) {
-    info("\n◦ Skipped. Nothing proposed.\n");
-    return undefined;
-  }
-  const provider = resolveLlmProvider({ ...llm, apiKey: key.trim() });
-  if (!provider) {
-    warn("\nThat key did not resolve to a provider. Nothing proposed.\n");
-    return undefined;
-  }
-  info(dim("  Key used for this run only. To save it: export WEBMCP_LLM_API_KEY=..."));
-  return provider;
-}
-
-/**
- * `generate --suggest`: the LLM layer's tool-worthiness proposals. The tool
- * finds the schema modules itself — nobody should have to pass a file path
- * to get proposals. A proposal surface only: it reads the discovered schemas,
- * asks, and prints. Nothing is declared, generated, or written; declaring is
- * the developer's edit.
- */
-async function suggest(): Promise<number> {
-  printBanner();
-  const cwd = process.cwd();
-
-  // The llm settings live in the config when there is one. A missing config is
-  // fine here: --suggest is itself the explicit opt-in, so env keys are enough.
-  let llm: CodegenConfig["llm"];
-  try {
-    llm = (await loadConfig(cwd)).config.llm;
-  } catch {
-    llm = undefined;
-  }
-
-  const modules = await findSchemaModules(cwd);
-  if (modules.length === 0) {
-    info(
-      "\n◦ No schema modules found. The tool looks for files named like " +
-        '"schemas.ts" or "models.ts" under packages/, src/, apps/, or lib/. ' +
-        "If yours live elsewhere, declare them directly in codegen.config.mjs.\n",
-    );
-    return 0;
-  }
-  const provider = await resolveProviderForOptIn(llm);
-  if (!provider) return 0;
-
-  const allSchemas: { name: string; schemaText: string }[] = [];
-  for (const modulePath of modules) {
-    let moduleExports: Record<string, unknown>;
-    try {
-      moduleExports = await importSchemaModule(cwd, modulePath);
-    } catch (error) {
-      debug(`could not load ${modulePath}: ${error instanceof Error ? error.message : error}`);
-      continue;
-    }
-    const { schemas, skipped } = schemaExportsToJson(moduleExports, cwd);
-    for (const entry of skipped) {
-      debug(`skipped ${entry.name}: ${entry.reason}`);
-    }
-    allSchemas.push(...schemas);
-  }
-  if (allSchemas.length === 0) {
-    info("\n◦ Found schema modules but no loadable schemas in them. Nothing to propose on.\n");
-    return 0;
-  }
-
-  const spinner = clack.spinner();
-  spinner.start("Asking the LLM which schemas are worth declaring");
-  const suggestions = await runLlmLayer(
-    { sources: [], outputs: [], llm: llm ?? {} },
-    { tools: [], findings: [], suggestExports: allSchemas },
-  );
-  spinner.stop("Done");
-
-  info("");
-  if (suggestions.length === 0) {
-    info("  ◦ The provider had no proposals. Declare schemas by hand, as usual.");
-  }
-  for (const suggestion of suggestions) {
-    info(`  ◦ ${suggestion.message}`);
-  }
-  info(
-    dim("\n  Proposals only; nothing was written. Declare what you want in codegen.config.mjs.\n"),
-  );
-  return 0;
-}
-
-/**
- * Load a user module for --suggest. TypeScript loads only via Node's native
- * type stripping (22.18+ / 23.6+): the leaning choice from the spec, kept as
- * the single code path so the CLI stays zero-dependency. The tradeoff lives
- * here on purpose: older runtimes and extensionless barrel imports get a
- * clear, actionable error instead of a second loader.
- */
-async function importSchemaModule(
-  cwd: string,
-  modulePath: string,
-): Promise<Record<string, unknown>> {
-  const absolute = resolve(cwd, modulePath);
-  try {
-    return (await import(pathToFileURL(absolute).href)) as Record<string, unknown>;
-  } catch (error) {
-    throw new Error(
-      `Could not load "${modulePath}". If it is TypeScript, run on Node 22.18+ (or 23.6+) ` +
-        "and import the schema file directly (explicit .ts extension; extensionless barrel " +
-        "re-exports need a bundler), or point --suggest at a plain-JS module.\n" +
-        `Underlying error: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-/**
  * The tool standard, measured locally: runs the pipeline exactly as generate
  * would (nothing written), then reports how the registered surface holds up
- * — names, descriptions, field text, annotations, surface size. Exits 1 on
+ * - names, descriptions, field text, annotations, surface size. Exits 1 on
  * error-level findings so CI can gate on it.
  */
 async function verify(flags: CliFlags): Promise<number> {
@@ -502,19 +339,44 @@ async function verify(flags: CliFlags): Promise<number> {
   });
 
   const registered = result.tools.filter((tool) => !tool.withheld);
-  const checks = verifyTools(result.tools);
+
+  // Journey files are the user's code, so verify can't get them from the
+  // pipeline's tool list - it reads the journeys/ folder of each tools
+  // output itself and lints what it finds there. Read them first: the surface
+  // count needs to include the tools they register at runtime.
+  const journeyInputs: JourneyFileInput[] = [];
+  for (const output of setup.config.outputs) {
+    if (output.kind !== "tools") continue;
+    const journeysDir = resolve(cwd, (output as { outDir?: string }).outDir ?? "", "journeys");
+    let entries: string[] = [];
+    try {
+      entries = (await readdir(journeysDir)).filter((entry) => entry.endsWith(".webmcp.ts"));
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      journeyInputs.push({
+        path: join("journeys", entry),
+        contents: await readFile(join(journeysDir, entry), "utf8"),
+      });
+    }
+  }
+
+  const journeyToolCount = countJourneyTools(journeyInputs);
+  const checks = verifyTools(result.tools, { journeyToolCount });
+  checks.push(...verifyJourneyFiles(journeyInputs));
 
   info("");
   info(`  ${setup.label}: ${result.tools.length} tools, ${registered.length} registered`);
   info("");
   for (const check of checks) {
-    const mark = check.level === "ok" ? "✓" : check.level === "error" ? "✖" : "!";
+    const mark = check.level === "ok" ? "ok" : check.level === "error" ? "x" : "!";
     info(`  ${mark} ${check.area}: ${check.summary}`);
     for (const finding of check.findings.slice(0, 8)) {
       info(`      ${finding}`);
     }
     if (check.findings.length > 8) {
-      info(dim(`      …and ${check.findings.length - 8} more`));
+      info(dim(`      ...and ${check.findings.length - 8} more`));
     }
   }
 
@@ -526,7 +388,7 @@ async function verify(flags: CliFlags): Promise<number> {
       info(`  ! ${finding.message}`);
     }
     if (pageFindings.length === 0) {
-      info("  ✓ Page checks passed");
+      info("  ok Page checks passed");
     }
   }
 
@@ -563,7 +425,7 @@ async function generate(flags: CliFlags): Promise<number> {
   const progress = flags.verbose ? (msg: string) => debug(msg) : undefined;
 
   // The data file carries the developer's dashboard edits and the last run's
-  // names. Both must reach the pipeline here — the dashboard is where edits
+  // names. Both must reach the pipeline here - the dashboard is where edits
   // are made, but this command is where files are written, and an edit that
   // only one of them reads does not survive.
   const data = await loadDataFile(cwd);
@@ -579,7 +441,7 @@ async function generate(flags: CliFlags): Promise<number> {
   });
 
   if (!flags.verbose && result.tools.length > 0) {
-    info(`  → Read ${result.tools.length + result.skipped.length} operations`);
+    info(`  -> Read ${result.tools.length + result.skipped.length} operations`);
   }
 
   // Audit errors block the write. Instead of requiring --force on a re-run,
@@ -631,31 +493,6 @@ async function generate(flags: CliFlags): Promise<number> {
       names: result.namesLedger,
       ...(result.migratedOverrides ? { overrides: result.migratedOverrides } : {}),
     });
-  }
-
-  // The LLM layer, on explicit opt-in only: polish the tools this run
-  // generated. Proposals print as `◦` lines; nothing is auto-applied, exit
-  // codes never change, and a failing provider is a note, not a failure.
-  if (flags.llm) {
-    const provider = await resolveProviderForOptIn(setup.config.llm);
-    if (provider) {
-      const spinner = clack.spinner();
-      spinner.start("Improving names and descriptions");
-      const suggestions = await runLlmLayer(
-        setup.config,
-        { tools: result.tools, findings: result.findings },
-        undefined,
-        provider,
-      );
-      spinner.stop("Done");
-      if (suggestions.length === 0) {
-        info("  ◦ The provider had no proposals.");
-      }
-      for (const suggestion of suggestions) {
-        info(`  ◦ ${suggestion.message}`);
-      }
-      info("");
-    }
   }
 
   if (!flags.verbose) {

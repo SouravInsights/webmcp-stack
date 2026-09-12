@@ -1,7 +1,7 @@
 /**
  * Logging via pino, pretty-printed through one in-process stream in both
  * TTY and CI: the report is the product's output, and a human reads CI logs
- * too — piped output is the same text with the colors stripped, never JSON
+ * too - piped output is the same text with the colors stripped, never JSON
  * envelopes. (If a machine-readable mode is ever needed, it is a --json
  * flag, not a silent format change on pipe.)
  *

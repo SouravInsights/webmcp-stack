@@ -310,7 +310,7 @@ export function auditTools(
     findings.push({
       level: "warning",
       tool: rename.to,
-      message: `Renamed "${rename.from}" → "${rename.to}" to keep tool names unique.`,
+      message: `Renamed "${rename.from}" -> "${rename.to}" to keep tool names unique.`,
     });
   }
 

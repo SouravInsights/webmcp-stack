@@ -3,6 +3,7 @@ import { RootProvider } from "fumadocs-ui/provider";
 import type { Metadata, Viewport } from "next";
 import { Caveat, Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
+import { SITE_URL } from "@/lib/site-url";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
@@ -13,7 +14,7 @@ const DESCRIPTION =
   "Turn an OpenAPI spec into safe, typed, human-reviewed WebMCP tools. Real files in your repo: contracts regenerate, your code survives, safety audit built in.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://webmcp-stack.vercel.app"),
+  metadataBase: new URL(SITE_URL),
   title: {
     template: "%s | webmcp-stack",
     default: "webmcp-stack: generate WebMCP tools from the API spec you already have",

@@ -72,7 +72,7 @@ paths:
   /pets/{id}/adopt:
     post:
       operationId: adoptPet
-      summary: Adopt a pet — this finalizes the adoption paperwork
+      summary: Adopt a pet - this finalizes the adoption paperwork
       parameters:
         - name: id
           in: path
