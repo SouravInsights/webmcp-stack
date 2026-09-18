@@ -2,7 +2,7 @@
 // the actual webmcp-codegen pipeline in dry-run mode. What the page shows is
 // what the CLI produces, because the CLI produced it.
 //
-// Run after changing site/demo/immich-excerpt.openapi.yaml or the generator:
+// Run after changing site/public/demo/immich-excerpt.openapi.yaml or the generator:
 //   node scripts/build-demo-data.mjs        (from site/)
 
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -25,7 +25,9 @@ const scratch = await mkdtemp(join(tmpdir(), "webmcp-demo-"));
 // the option name; say it in a comment on purpose.
 const report = await runGenerate(
   {
-    sources: [openapi({ spec: "demo/immich-excerpt.openapi.yaml" })],
+    // Served from public/ so the hosted playground can load the same excerpt
+    // the landing page's demo was built from.
+    sources: [openapi({ spec: "public/demo/immich-excerpt.openapi.yaml" })],
     outputs: [tools({ outDir: join(scratch, "src/webmcp") })],
   },
   { cwd: site, dryRun: true, skipAudit: false, force: true },

@@ -1,0 +1,44 @@
+---
+title: Playground
+description: Run codegen on your own OpenAPI spec in the browser. No install, no account, nothing stored.
+---
+
+The [playground](/playground) runs the same pipeline the CLI runs. Paste an OpenAPI
+document, upload a file, or point at a URL, and the tools it finds appear in the same
+dashboard `webmcp-codegen dev` serves: grouped by risk, each with its generated source
+and a form that calls the endpoint.
+
+Use it to see what your spec turns into before you install anything, to show the review
+surface to a teammate without a checkout, or to check a spec you are still writing.
+
+## What runs where
+
+| Step | Where it happens |
+|---|---|
+| Reading the spec | Your browser. Paste, upload, or fetch from the URL you typed. |
+| Generation | Our server, in a temporary directory that is deleted before the page gets its answer. Nothing is stored. |
+| Tool calls | Your browser, against the base URL in the form. |
+| Edits to descriptions and toggles | This browser tab only. |
+
+The last row is the difference from the local dashboard. `webmcp-codegen dev` writes your
+edits to `.webmcp-codegen.json`, so they survive regeneration. The playground keeps them
+in the tab and says so on each editor.
+
+## Two honest limits
+
+**CORS.** Your browser reads the spec URL and calls the API, so a host that refuses
+cross-origin requests cannot be used. The page says which of the two happened. If a spec
+URL fails, download the file and paste or upload it instead.
+
+**Sessions.** A tool call from the playground carries your browser's cookies for that API,
+if the API allows cross-origin requests from this site. Endpoints that need a signed-in
+session usually fail with a 401 here. That is not a codegen problem: test those in your
+app, or in Chrome DevTools, where the session is real. See
+[Chrome DevTools WebMCP panel](/docs/devtools).
+
+## Audit errors
+
+The playground always shows the tools, even when the audit finds errors, because seeing
+them is the point of a dry run. In your repo those errors stop `generate` with a nonzero
+exit, and nothing is written until they are fixed. Read
+[Safety and the audit](/docs/safety) for what each finding means.

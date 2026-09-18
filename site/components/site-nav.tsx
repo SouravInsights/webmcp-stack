@@ -7,6 +7,7 @@ import { Logo } from "@/components/logo";
 const REPO = "https://github.com/SouravInsights/webmcp-stack";
 
 const LINKS: Array<{ href: string; label: string; external?: boolean }> = [
+  { href: "/playground", label: "playground" },
   { href: "/docs", label: "docs" },
   { href: "/about", label: "about" },
   { href: "/brand", label: "brand" },

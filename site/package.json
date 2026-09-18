@@ -9,6 +9,7 @@
     "start": "next start -p 3001",
     "postinstall": "fumadocs-mdx",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "demo:build": "node scripts/build-demo-data.mjs"
   },
   "dependencies": {

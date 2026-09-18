@@ -14,11 +14,11 @@
 
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { basename } from "node:path";
 import { loadDataFile, saveDataFile } from "../data-file.js";
 import { runGenerate } from "../pipeline.js";
 import { resolveSetup } from "../setup.js";
-import type { GeneratedFile, JsonSchema, ReviewedTool, ToolOverrides } from "../types.js";
+import { buildToolRequest } from "./request.js";
+import { dashboardState, type UiState, type UiTool } from "./state.js";
 import { dashboardHtml } from "./ui.js";
 
 export interface DevServerOptions {
@@ -35,41 +35,6 @@ interface RunRequest {
   baseUrl?: string;
 }
 
-/** The JSON shape the UI renders. */
-interface DashboardState {
-  label: string;
-  outDir?: string;
-  tools: {
-    name: string;
-    verb?: string;
-    path?: string;
-    /** Where this tool came from: the route, the schema, or both ("merged"). */
-    provenance: string;
-    /** Present when the tool annotates a form instead of generating a file. */
-    form?: { path: string };
-    description: string;
-    sideEffect: string;
-    riskTier: string;
-    enabled: boolean;
-    withheld: boolean;
-    endpointRole: string;
-    piiInOutput: string[];
-    inputSchema: JsonSchema;
-    /** Per-field text the developer overrode, so the editor shows their words. */
-    fieldOverrides?: Record<string, string>;
-    /** Route info the direct "run it" test needs to build a real request. */
-    pathTemplate?: string;
-    paramLocations?: { path: string[]; query: string[]; body: string[] };
-    serverUrl?: string;
-    requiresAuth?: boolean;
-    /** The generated file, shown on demand in the detail pane. */
-    source?: { fileName: string; code: string };
-    findings: { level: string; message: string }[];
-  }[];
-  skipped: { ref: string; reason: string }[];
-  notes: string[];
-}
-
 export async function startDevServer(options: DevServerOptions): Promise<Server> {
   const setup = await resolveSetup(options.cwd, {
     dryRun: true,
@@ -80,7 +45,7 @@ export async function startDevServer(options: DevServerOptions): Promise<Server>
 
   /** Re-run the pipeline fresh on every state request: edits to the spec
    *  show up on reload without restarting the dashboard. */
-  async function currentState(): Promise<DashboardState> {
+  async function currentState(): Promise<UiState> {
     const data = await loadDataFile(options.cwd);
     const result = await runGenerate(setup.config, {
       cwd: options.cwd,
@@ -90,15 +55,11 @@ export async function startDevServer(options: DevServerOptions): Promise<Server>
       // edits follow the renamed tool instead of vanishing from the UI.
       previousNames: data.names,
     });
-    return {
+    return dashboardState(result, {
       label: setup.label,
       outDir: setup.config.outputs[0]?.outDir,
-      tools: result.tools.map((tool) =>
-        toUiTool(tool, result.findings, result.files, data.overrides),
-      ),
-      skipped: result.skipped,
-      notes: result.notes,
-    };
+      overrides: data.overrides,
+    });
   }
 
   const server = createServer(async (request, response) => {
@@ -180,100 +141,28 @@ export async function startDevServer(options: DevServerOptions): Promise<Server>
   return server;
 }
 
-function toUiTool(
-  tool: ReviewedTool,
-  findings: { level: string; tool?: string; message: string }[],
-  files: GeneratedFile[],
-  overrides: ToolOverrides | undefined,
-): DashboardState["tools"][number] {
-  // Route info only exists for endpoint-backed tools. A standalone schema
-  // tool has no verb, and showing one would be a lie; the provenance line
-  // carries the truth instead ("schema: create-trip").
-  const route = tool.endpointRef ?? (tool.source.kind === "openapi" ? tool.source.ref : "");
-  const [verb, ...rest] = route ? route.split(" ") : [undefined, ""];
-  // Provenance names where the tool came from, exactly once. The route line
-  // owns the verb and path, so a merged tool names only its schema, and a
-  // pure OpenAPI tool has nothing left to say: no line at all.
-  const provenance = tool.endpointRef
-    ? `merged: the ${tool.source.ref} schema and this route`
-    : tool.source.kind === "schema"
-      ? `schema: ${tool.source.ref}`
-      : "";
-  // The dry run already holds every file's contents in memory, so the
-  // dashboard can show the real generated source per tool - the same
-  // progressive disclosure the site's demo has, against live output.
-  const file = files.find((f) => basename(f.path) === `${tool.name}.webmcp.ts`);
-  return {
-    name: tool.name,
-    verb,
-    path: rest.join(" "),
-    provenance,
-    ...(tool.form ? { form: tool.form } : {}),
-    description: tool.description,
-    sideEffect: tool.sideEffect,
-    riskTier: tool.riskTier,
-    enabled: tool.enabledByDefault,
-    withheld: tool.withheld,
-    endpointRole: tool.endpointRole,
-    piiInOutput: tool.piiInOutput,
-    inputSchema: tool.inputSchema,
-    ...(overrides?.[tool.name]?.fields ? { fieldOverrides: overrides[tool.name]?.fields } : {}),
-    ...(tool.pathTemplate ? { pathTemplate: tool.pathTemplate } : {}),
-    ...(tool.paramLocations ? { paramLocations: tool.paramLocations } : {}),
-    ...(tool.serverUrl ? { serverUrl: tool.serverUrl } : {}),
-    requiresAuth: tool.requiresAuth,
-    ...(file ? { source: { fileName: basename(file.path), code: file.contents } } : {}),
-    findings: findings
-      .filter((finding) => finding.tool === tool.name)
-      .map((finding) => ({ level: finding.level, message: finding.message })),
-  };
-}
-
 /**
  * The direct "run it" test: call the endpoint the way the generated
  * execute() would, but server-side. Two honest limitations the UI states:
  * there is no browser session here (auth cookies do not apply), and the
  * call needs an absolute base URL - the spec's servers entry or one the
  * developer types in.
+ *
+ * The request itself is built by buildToolRequest, the same function the
+ * site's playground runs in the visitor's browser.
  */
 async function runEndpoint(
-  tool: DashboardState["tools"][number],
+  tool: UiTool,
   input: Record<string, unknown>,
   baseUrlOverride?: string,
 ): Promise<{ ok: boolean; status?: number; body?: unknown; error?: string }> {
-  const base = baseUrlOverride ?? tool.serverUrl;
-  if (!base) {
-    return {
-      ok: false,
-      error:
-        "No base URL: the spec lists no absolute server. Type your app's URL " +
-        '(e.g. http://localhost:3000) in the "base URL" field and run again.',
-    };
-  }
-  if (!tool.pathTemplate || !tool.verb) {
-    return { ok: false, error: "This tool has no route to call." };
-  }
-
-  let path = tool.pathTemplate;
-  for (const param of tool.paramLocations?.path ?? []) {
-    path = path.replace(`{${param}}`, encodeURIComponent(String(input[param] ?? "")));
-  }
-  const url = new URL(path, base);
-  for (const param of tool.paramLocations?.query ?? []) {
-    const value = input[param];
-    if (value !== undefined && value !== null) url.searchParams.set(param, String(value));
-  }
-  const bodyFields = tool.paramLocations?.body ?? [];
-  const body =
-    bodyFields.length === 1 && bodyFields[0] === "body"
-      ? input.body
-      : bodyFields.length > 0
-        ? Object.fromEntries(bodyFields.map((field) => [field, input[field]]))
-        : undefined;
+  const built = buildToolRequest(tool, input, baseUrlOverride);
+  if ("error" in built) return { ok: false, error: built.error };
+  const { method, url, body } = built.request;
 
   try {
     const response = await fetch(url, {
-      method: tool.verb,
+      method,
       headers: body !== undefined ? { "content-type": "application/json" } : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });

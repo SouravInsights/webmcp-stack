@@ -9,36 +9,18 @@
  * No framework, no build step. Plain HTML/CSS/JS shipped as a string.
  */
 
-interface UiTool {
-  name: string;
-  description: string;
-  sideEffect: string;
-  enabled: boolean;
-  endpointRole: string;
-  piiInOutput: string[];
-  findings: { level: string; message: string }[];
-  inputSchema?: Record<string, unknown>;
-  serverUrl?: string;
-  requiresAuth?: boolean;
-  verb?: string;
-  path?: string;
-  /** Where this tool came from: the route, the schema, or both ("merged"). */
-  provenance?: string;
-  /** Present when the tool annotates a form instead of generating a file. */
-  form?: { path: string };
-  /** Per-field text the developer overrode, so the editor shows their words. */
-  fieldOverrides?: Record<string, string>;
-  /** The generated file, shown on demand. The dashboard is the disclosure. */
-  source?: { fileName: string; code: string };
-}
+import type { UiState } from "./state.js";
 
-interface UiState {
-  label: string;
-  outDir?: string;
-  tools: UiTool[];
-  skipped: { ref: string; reason: string }[];
-  notes: string[];
-}
+export type { UiState, UiTool } from "./state.js";
+
+/**
+ * Where the dashboard is mounted, which decides what a few lines of copy
+ * say. Both hosts render this one page, so the words have to match the
+ * host: in the dev server an edit is saved to .webmcp-codegen.json and a
+ * test call runs server-side; in the hosted playground an edit lives in the
+ * tab and a test call goes out from the browser.
+ */
+export type DashboardMode = "dev" | "playground";
 
 /**
  * The dashboard page. With no argument it boots by fetching /api/state
@@ -46,7 +28,10 @@ interface UiState {
  * instead, with no network: the site's landing demo mounts this exact UI
  * statically, so the demo can never drift from the product.
  */
-export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean }): string {
+export function dashboardHtml(
+  embeddedState?: UiState,
+  opts?: { scoped?: boolean; mode?: DashboardMode },
+): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -835,6 +820,7 @@ export function dashboardHtml(embeddedState?: UiState, opts?: { scoped?: boolean
 
 <script>
 var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
+var PLAYGROUND = ${opts?.mode === "playground" ? "true" : "false"};
 (function () {
   var state = null;
   var selected = null;
@@ -1050,14 +1036,22 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       '<button class="btn btn-primary" id="save-desc">Save</button>' +
       '<span class="saved-indicator" id="saved">Saved</span>' +
       "</div>" +
-      '<div class="edit-hint">Agents pick tools by this text. Saved to .webmcp-codegen.json, so it survives regeneration. CmdS to save.</div>' +
+      '<div class="edit-hint">' +
+      (PLAYGROUND
+        ? "Agents pick tools by this text. In the playground this edit stays in your browser tab; in your repo it saves to .webmcp-codegen.json and survives regeneration."
+        : "Agents pick tools by this text. Saved to .webmcp-codegen.json, so it survives regeneration. CmdS to save.") +
+      "</div>" +
       "</div>" +
 
       (fieldRows
         ? '<div class="section">' +
           '<div class="section-label">Field descriptions</div>' +
           '<div class="field-list">' + fieldRows + "</div>" +
-          '<div class="edit-hint">Agents fill inputs from this text. Saved per field to .webmcp-codegen.json, so it survives regeneration.</div>' +
+          '<div class="edit-hint">' +
+          (PLAYGROUND
+            ? "Agents fill inputs from this text. In the playground this edit stays in your browser tab; in your repo it saves per field to .webmcp-codegen.json."
+            : "Agents fill inputs from this text. Saved per field to .webmcp-codegen.json, so it survives regeneration.") +
+          "</div>" +
           "</div>"
         : "") +
 
@@ -1068,7 +1062,9 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
       '<div class="toggle-copy"><strong>' + (tool.enabled ? "Enabled" : "Disabled") + "</strong>" +
       (tool.enabled
         ? "This tool works as soon as the app registers it."
-        : "The generated code is there, commented out. Flipping this regenerates it enabled on the next run.") +
+        : PLAYGROUND
+          ? "The generated code is there, commented out. Flipping this only changes this tab; in your repo the next generate run writes it enabled."
+          : "The generated code is there, commented out. Flipping this regenerates it enabled on the next run.") +
       "</div></div>" +
       "</div>" +
 
@@ -1076,10 +1072,14 @@ var EMBEDDED_STATE = ${embeddedState ? JSON.stringify(embeddedState) : "null"};
         ? '<div class="section">' +
           '<div class="section-label">Test</div>' +
           '<div class="try-section">' +
-          '<div class="try-header"><h3>Run this tool</h3><span class="try-note">server-side, no browser session</span></div>' +
+          '<div class="try-header"><h3>Run this tool</h3><span class="try-note">' +
+          (PLAYGROUND ? "from this page, your session applies" : "server-side, no browser session") +
+          "</span></div>" +
           '<div class="try-body">' +
           (tool.requiresAuth
-            ? '<div class="auth-note">! This endpoint requires a browser session. The dashboard runs server-side, so you will get a 401. Test it in Chrome DevTools where you are signed in.</div>'
+            ? PLAYGROUND
+              ? '<div class="auth-note">! This endpoint requires a session. The call goes out from this page, so it works if you are signed in to this API in this browser.</div>'
+              : '<div class="auth-note">! This endpoint requires a browser session. The dashboard runs server-side, so you will get a 401. Test it in Chrome DevTools where you are signed in.</div>'
             : "") +
           '<input class="base-url-input" id="base-url" type="text" placeholder="Base URL (e.g. http://localhost:3000)" value="' + esc(baseUrl) + '" spellcheck="false" />' +
           (fields || '<div style="color: var(--faint); font-size: 13px; margin-bottom: 14px;">This tool takes no inputs.</div>') +
