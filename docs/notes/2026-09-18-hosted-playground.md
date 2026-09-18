@@ -51,3 +51,44 @@ frame. No fake persistence, no account, no storage.
   the page promises not to have.
 - No `/playground` entry in `sitemap.ts`. It is a tool, not a page to rank; the docs page
   and the nav link are the way in. Revisit if it earns organic traffic.
+
+## Follow-up: the first deploy shipped without its assets (same day)
+
+The deployed playground failed on every request:
+
+```
+webmcp-codegen: bundled asset missing: journey.webmcp.ts
+(looked in /vercel/path0/packages/codegen/assets/journey.webmcp.ts, ...)
+```
+
+The tools output always writes the journey helper and the agent skill, and `assetText()`
+read them from the package's `assets/` directory with `fs` at runtime. Two things kept
+that invisible until production:
+
+- webpack bundles the package into the route and rewrites `import.meta.url` to the build
+  machine's absolute path, so on a developer's machine the read succeeded from their own
+  checkout.
+- Next's file tracer cannot see a `readFile` whose path is computed, so `assets/` was
+  never in the function bundle. The traced-files manifest
+  (`site/.next/server/app/api/playground/route.js.nft.json`) listed the package's
+  `package.json` and nothing else.
+
+Rejected fixes, and why:
+
+- Add the folder to the trace (`outputFileTracingIncludes`): works, but it fixes this one
+  host and leaves every other serverless use of the pipeline to rediscover the trap.
+- Static `new URL("../assets/...", import.meta.url)` references so tracers notice the
+  files: webpack rewrites those into web-served asset URLs (`/_next/static/media/...`)
+  that `readFile` cannot open. Verified by deleting `assets/` and running the production
+  server, which still failed.
+
+What shipped: the assets are embedded at package build time. `assets.ts` imports them as
+text (`?raw`), which vitest resolves natively and tsup resolves with a small esbuild
+plugin, so the shipped code carries the text and no host has to be told about the files.
+`assets/` stays the reviewed source of truth, and a test asserts the embed matches it
+byte for byte.
+
+Verified against the deployment condition itself: with `packages/codegen/assets` deleted,
+`next build` plus `next start` generated 19 tools from the Petstore spec and 6 from the
+Immich excerpt, both HTTP 200. Before the fix the same test returned 422 with the error
+above.
