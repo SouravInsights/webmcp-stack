@@ -111,13 +111,25 @@ export default function HomePage() {
             </p>
             <div className="flex flex-col items-center gap-4">
               <CopyCommand command={COMMAND} />
-              <Link
-                href="/docs"
-                className="font-mono text-sm text-dim transition-colors duration-150 hover:text-ink"
-                style={{ transitionTimingFunction: "var(--ease-reading)" }}
-              >
-                read the docs →
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-4 font-mono text-sm text-dim">
+                <Link
+                  href="/playground"
+                  className="transition-colors duration-150 hover:text-accent"
+                  style={{ transitionTimingFunction: "var(--ease-reading)" }}
+                >
+                  try it in your browser →
+                </Link>
+                <span className="text-ghost" aria-hidden="true">
+                  /
+                </span>
+                <Link
+                  href="/docs"
+                  className="transition-colors duration-150 hover:text-ink"
+                  style={{ transitionTimingFunction: "var(--ease-reading)" }}
+                >
+                  read the docs →
+                </Link>
+              </div>
             </div>
           </div>
 

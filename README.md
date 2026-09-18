@@ -42,6 +42,8 @@ npx @webmcp-stack/codegen dev      # local dashboard: browse, edit, toggle, and 
 npx @webmcp-stack/codegen verify   # check the tool set against the standard; exits 1 on errors
 ```
 
+No install yet? The [playground](https://webmcp.souravinsights.com/playground) runs this same pipeline on a spec you paste into the browser, and shows the tools it finds in the same dashboard.
+
 ## Why not just ask an LLM to write these?
 
 You can, and it works. What you get back is different every time, and nothing checks it. Each tool needs the same small decisions made correctly: read or write, registered or hidden, user confirmation or not, trustworthy output or not. Across 40 endpoints that is hundreds of decisions, easy to forget and tedious to apply by hand. The generator makes each one once, from rules, and applies it to every tool on every run, so you review a diff and gate it in CI. It also knows the spec trivia: a rejected `execute` reaches the agent as a bare `UnknownError` with your message discarded, so generated tools return readable errors instead of throwing.

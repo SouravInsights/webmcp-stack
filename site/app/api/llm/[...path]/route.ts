@@ -10,6 +10,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { createRateLimiter } from "@/lib/rate-limit";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 /** The model every hosted request uses. Callers do not get a choice. */
@@ -20,16 +21,7 @@ const MAX_TOKENS = 2048;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 10;
 
-const hits = new Map<string, number[]>();
-
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= MAX_REQUESTS_PER_WINDOW) return true;
-  recent.push(now);
-  hits.set(ip, recent);
-  return false;
-}
+const limiter = createRateLimiter({ windowMs: WINDOW_MS, max: MAX_REQUESTS_PER_WINDOW });
 
 interface ChatRequest {
   messages?: { role: string; content: string }[];
@@ -44,8 +36,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (rateLimited(ip)) {
+  if (limiter.limited(request)) {
     return NextResponse.json(
       { error: "Free tier rate limit reached. Add your own API key to keep going." },
       { status: 429 },

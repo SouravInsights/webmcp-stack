@@ -1,8 +1,9 @@
 "use client";
 
-import { dashboardHtml } from "@webmcp-stack/codegen/dev-ui";
+import type { UiState } from "@webmcp-stack/codegen/dev";
 import { useEffect, useRef } from "react";
 import { CopyCommand } from "@/components/copy-command";
+import { mountDashboard } from "@/lib/dashboard-mount";
 import { DASHBOARD_STATE, DEMO_SOURCE } from "@/lib/demo-data";
 
 /* The demo is the product: the real dashboard UI from
@@ -15,39 +16,12 @@ export function DashboardDemo() {
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || host.shadowRoot) return;
-    const root = host.attachShadow({ mode: "open" });
-    // Scripts set via innerHTML or DOMParser never execute (spec-level,
-    // shadow roots included). Adopt the styles and markup, then re-create
-    // the script element so the dashboard's JS actually runs.
-    const doc = new DOMParser().parseFromString(
-      dashboardHtml(DASHBOARD_STATE as never, { scoped: true }),
-      "text/html",
-    );
-    for (const node of Array.from(doc.querySelectorAll("style"))) {
-      root.appendChild(document.importNode(node, true));
-    }
-    for (const node of Array.from(doc.body.childNodes)) {
-      if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === "SCRIPT") continue;
-      root.appendChild(document.importNode(node, true));
-    }
-    const script = doc.querySelector("script");
-    if (script?.textContent) {
-      // The dashboard's JS uses document.getElementById and document.querySelector,
-      // which do not pierce a shadow root. Delegate both to the shadow root.
-      const shim =
-        "(function (root) {" +
-        "  var byId = document.getElementById.bind(document);" +
-        "  document.getElementById = function (id) { return byId(id) || root.getElementById(id); };" +
-        "  var qs = document.querySelector.bind(document);" +
-        "  document.querySelector = function (sel) { return qs(sel) || root.querySelector(sel); };" +
-        "})(" +
-        "document.querySelector('.dashboard-demo-host').shadowRoot" +
-        ");";
-      const live = document.createElement("script");
-      live.textContent = shim + script.textContent;
-      root.appendChild(live);
-    }
+    if (!host) return;
+    // The landing demo shows the local dashboard: no bridge, so its test
+    // calls and edit hints read the way they do on the developer's machine.
+    // The cast is for the generated literal in lib/demo-data.ts: its tool
+    // shapes are inferred as a union, which no schema type can accept as-is.
+    mountDashboard(host, DASHBOARD_STATE as unknown as UiState);
   }, []);
 
   return (
